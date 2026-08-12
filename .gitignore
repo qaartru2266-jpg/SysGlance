@@ -1,0 +1,14 @@
+# Build outputs
+/build/
+/build-nmake/
+
+# IDE / editor
+/.vs/
+*.user
+*.suo
+*.vcxproj
+*.vcxproj.filters
+
+# OS
+Thumbs.db
+Desktop.ini
