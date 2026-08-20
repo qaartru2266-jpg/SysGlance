@@ -65,3 +65,4 @@ GPU 指标依赖 Windows 性能计数器和驱动。Intel、NVIDIA、AMD 的常�
 - [产品说明](docs/PRODUCT.md)：产品范围、显示语义和数据口径。
 - [开发记录](docs/DEVELOPMENT.md)：当前实现状态、重要决策、已知限制与验证清单。
 - [协作指南](AGENTS.md)：接手开发时必须遵守的边界和验证要求。
+- [跨电脑测试说明](docs/CROSS_DEVICE_TEST.md)：在另一台 Windows 电脑下载、验证并反馈的步骤。
