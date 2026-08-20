@@ -1,6 +1,8 @@
 # Build outputs
 /build/
 /build-nmake/
+/build-portable/
+/dist/
 
 # IDE / editor
 /.vs/

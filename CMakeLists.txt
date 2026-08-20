@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SysGlance VERSION 0.1.0 LANGUAGES CXX)
+project(SysGlance VERSION 0.1.0 LANGUAGES CXX RC)
 
 include(CTest)
 
@@ -13,6 +13,7 @@ add_executable(SysGlance WIN32
     src/config.cpp
     src/metrics.cpp
     src/ui.cpp
+    src/sysglance.rc
 )
 
 target_include_directories(SysGlance PRIVATE src)
@@ -28,6 +29,9 @@ target_compile_definitions(SysGlance PRIVATE
 if (MSVC)
     target_compile_options(SysGlance PRIVATE /W4 /permissive- /EHsc /utf-8)
     target_compile_definitions(SysGlance PRIVATE _CRT_SECURE_NO_WARNINGS)
+    # GitHub Release assets should run without a separately installed VC++ runtime.
+    set_property(TARGET SysGlance PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 target_link_libraries(SysGlance PRIVATE

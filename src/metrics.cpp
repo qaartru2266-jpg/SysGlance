@@ -17,6 +17,7 @@ namespace sysglance {
 namespace {
 
 constexpr UINT kMetricsReadyMessage = WM_APP + 1;
+constexpr std::uint64_t kGpuRetryDelayMs = 5000;
 
 std::uint64_t FileTimeValue(const FILETIME& value) {
     ULARGE_INTEGER result{};
@@ -148,6 +149,7 @@ struct MetricService::GpuState {
     bool firstCollection = true;
     bool initialized = false;
     int consecutiveFailures = 0;
+    std::uint64_t nextRetryTick = 0;
 
     ~GpuState() {
         if (query != nullptr) {
@@ -156,6 +158,7 @@ struct MetricService::GpuState {
     }
 
     bool Initialize() {
+        initialized = false;
         if (query != nullptr) {
             PdhCloseQuery(query);
             query = nullptr;
@@ -164,6 +167,9 @@ struct MetricService::GpuState {
         dedicatedMemoryCounter = nullptr;
         sharedMemoryCounter = nullptr;
         firstCollection = true;
+        // Keep the adapter inventory available even on machines where the Windows GPU
+        // performance counters are absent (for example some VMs and RDP sessions).
+        QueryMemoryCapacity();
         if (PdhOpenQueryW(nullptr, 0, &query) != ERROR_SUCCESS) {
             return false;
         }
@@ -182,8 +188,14 @@ struct MetricService::GpuState {
             return false;
         }
         initialized = PdhCollectQueryData(query) == ERROR_SUCCESS;
-        QueryMemoryCapacity();
         return initialized;
+    }
+
+    void ReinitializeWhenDue() {
+        const auto now = GetTickCount64();
+        if (now < nextRetryTick) return;
+        nextRetryTick = now + kGpuRetryDelayMs;
+        Initialize();
     }
 
     void QueryMemoryCapacity() {
@@ -286,7 +298,7 @@ struct MetricService::GpuState {
         memoryAvailable = false;
         if (query == nullptr || PdhCollectQueryData(query) != ERROR_SUCCESS) {
             ++consecutiveFailures;
-            if (consecutiveFailures >= 2) Initialize();
+            if (consecutiveFailures >= 2) ReinitializeWhenDue();
             return false;
         }
         consecutiveFailures = 0;
@@ -312,7 +324,14 @@ struct MetricService::GpuState {
                                   ? std::numeric_limits<std::uint64_t>::max()
                                   : static_cast<std::uint64_t>(total);
         }
-        return hasUtilization || hasDedicated || hasShared;
+        const bool available = hasUtilization || hasDedicated || hasShared;
+        if (!available) {
+            ++consecutiveFailures;
+            if (consecutiveFailures >= 3) ReinitializeWhenDue();
+            return false;
+        }
+        consecutiveFailures = 0;
+        return true;
     }
 };
 
@@ -328,9 +347,15 @@ bool MetricService::Start(int intervalMs, HWND notificationWindow) {
     }
     intervalMs_.store(intervalMs == 500 || intervalMs == 2000 ? intervalMs : 1000);
     notificationWindow_ = notificationWindow;
-    gpu_ = std::make_unique<GpuState>();
-    gpu_->Initialize();
-    worker_ = std::thread(&MetricService::Run, this);
+    try {
+        gpu_ = std::make_unique<GpuState>();
+        gpu_->Initialize();
+        worker_ = std::thread(&MetricService::Run, this);
+    } catch (...) {
+        gpu_.reset();
+        running_.store(false);
+        return false;
+    }
     return true;
 }
 
@@ -379,11 +404,16 @@ std::vector<GpuAdapterInfo> MetricService::GpuAdapters() const {
 
 void MetricService::Run() {
     while (running_) {
-        MetricSnapshot next;
-        Sample(next);
-        snapshot_.store(std::make_shared<MetricSnapshot>(next), std::memory_order_release);
-        if (notificationWindow_ != nullptr) {
-            PostMessageW(notificationWindow_, kMetricsReadyMessage, 0, 0);
+        try {
+            MetricSnapshot next;
+            Sample(next);
+            snapshot_.store(std::make_shared<MetricSnapshot>(next), std::memory_order_release);
+            if (notificationWindow_ != nullptr) {
+                PostMessageW(notificationWindow_, kMetricsReadyMessage, 0, 0);
+            }
+        } catch (...) {
+            // A provider must never be allowed to unwind through the worker thread;
+            // keep the last good snapshot and retry after the normal interval.
         }
 
         std::unique_lock lock(wakeMutex_);

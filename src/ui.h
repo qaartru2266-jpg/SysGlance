@@ -79,6 +79,9 @@ private:
     std::wstring TooltipText() const;
     std::wstring FormatRate(double bytesPerSecond) const;
     std::wstring FormatBytes(std::uint64_t bytes) const;
+    std::wstring FormatCpuPercent(double percent, const AppConfig& config) const;
+    std::wstring FormatMemoryPercent(double percent, const AppConfig& config) const;
+    std::wstring FormatMemoryBytes(std::uint64_t bytes) const;
     std::wstring FormatPercent(double percent, const AppConfig& config) const;
     std::wstring FormatFixedNumber(double value, int width, double maximum) const;
     void UpdateSettingsButtonState();

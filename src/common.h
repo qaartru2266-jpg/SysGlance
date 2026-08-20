@@ -125,9 +125,9 @@ inline bool IsKnownRefreshInterval(int value) {
     return value == 500 || value == 1000 || value == 2000;
 }
 
-// Compact network rate for HUD/tray. Never uses raw bytes.
-// Below 100 KiB/s keeps one-decimal KB (0.0KB .. 99.9KB); at/above that threshold
-// switches to MB so ~100 KiB/s reads as 0.1MB. Number width 6, unit width 3.
+// Compact network rate for HUD/tray. Never uses raw bytes or the B suffix.
+// Below 100 KiB/s keeps one-decimal K (0.0K .. 99.9K); at/above that threshold
+// switches to M so ~100 KiB/s reads as 0.1M. Number width 4, magnitude width 1.
 inline std::wstring FormatNetworkRate(double bytesPerSecond) {
     constexpr double kKiB = 1024.0;
     constexpr double kMiB = kKiB * kKiB;
@@ -140,12 +140,12 @@ inline std::wstring FormatNetworkRate(double bytesPerSecond) {
     std::wstringstream stream;
     stream << std::fixed << std::setprecision(value >= 1000.0 ? 0 : 1) << value;
     std::wstring number = stream.str();
-    if (number.size() > 6) {
-        number = L"99999+";
-    } else if (number.size() < 6) {
-        number.insert(0, 6 - number.size(), L' ');
+    if (number.size() > 4) {
+        number = L"999+";
+    } else if (number.size() < 4) {
+        number.insert(0, 4 - number.size(), L' ');
     }
-    return number + (useMib ? L"MB " : L"KB ");
+    return number + (useMib ? L"M" : L"K");
 }
 
 }  // namespace sysglance

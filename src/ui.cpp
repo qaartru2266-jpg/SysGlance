@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "resource.h"
 
 #include <commctrl.h>
 #include <commdlg.h>
@@ -235,56 +236,8 @@ bool AppUi::CreateMainWindow() {
 }
 
 HICON AppUi::CreateTrayIconGraphic() const {
-    constexpr int kIconSize = 32;
-    HDC screen = GetDC(nullptr);
-    if (screen == nullptr) {
-        return nullptr;
-    }
-
-    HBITMAP color = CreateCompatibleBitmap(screen, kIconSize, kIconSize);
-    HBITMAP mask = CreateBitmap(kIconSize, kIconSize, 1, 1, nullptr);
-    HDC memory = CreateCompatibleDC(screen);
-    ReleaseDC(nullptr, screen);
-    if (color == nullptr || mask == nullptr || memory == nullptr) {
-        if (color != nullptr) DeleteObject(color);
-        if (mask != nullptr) DeleteObject(mask);
-        if (memory != nullptr) DeleteDC(memory);
-        return nullptr;
-    }
-
-    HGDIOBJ previous = SelectObject(memory, color);
-    RECT bounds{0, 0, kIconSize, kIconSize};
-    HBRUSH background = CreateSolidBrush(RGB(20, 27, 42));
-    FillRect(memory, &bounds, background);
-    DeleteObject(background);
-
-    HPEN outline = CreatePen(PS_SOLID, 2, RGB(91, 112, 147));
-    HGDIOBJ previousPen = SelectObject(memory, outline);
-    HGDIOBJ previousBrush = SelectObject(memory, GetStockObject(NULL_BRUSH));
-    Rectangle(memory, 2, 2, 30, 30);
-    SelectObject(memory, previousBrush);
-    SelectObject(memory, previousPen);
-    DeleteObject(outline);
-
-    HBRUSH bars = CreateSolidBrush(RGB(76, 220, 154));
-    const RECT barOne{7, 19, 11, 26};
-    const RECT barTwo{14, 13, 18, 26};
-    const RECT barThree{21, 8, 25, 26};
-    FillRect(memory, &barOne, bars);
-    FillRect(memory, &barTwo, bars);
-    FillRect(memory, &barThree, bars);
-    DeleteObject(bars);
-    SelectObject(memory, previous);
-    DeleteDC(memory);
-
-    ICONINFO iconInfo{};
-    iconInfo.fIcon = TRUE;
-    iconInfo.hbmColor = color;
-    iconInfo.hbmMask = mask;
-    HICON icon = CreateIconIndirect(&iconInfo);
-    DeleteObject(color);
-    DeleteObject(mask);
-    return icon;
+    return static_cast<HICON>(LoadImageW(instance_, MAKEINTRESOURCEW(IDI_SYSGLANCE), IMAGE_ICON,
+                                         32, 32, LR_DEFAULTCOLOR));
 }
 
 void AppUi::CreateTrayIcon() {
@@ -612,7 +565,41 @@ void AppUi::UpdateTrayTooltip() {
 std::wstring AppUi::FormatBytes(std::uint64_t bytes) const {
     constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
     // The compact actual-memory display deliberately omits the GiB suffix.
-    return FormatFixedNumber(static_cast<double>(bytes) / kGiB, 5, 999.95);
+    return FormatFixedNumber(static_cast<double>(bytes) / kGiB, 4, 99.95);
+}
+
+std::wstring AppUi::FormatCpuPercent(double percent, const AppConfig& config) const {
+    // CPU is the first HUD field, so pad the number itself (after C), never before C
+    // or after it. This keeps C09.0/C11.0 and C09/C11 equally wide.
+    percent = std::clamp(percent, 0.0, 99.9);
+    std::wstring result;
+    if (config.showPercentDecimal) {
+        result = Number(percent, 1);
+        if (result.size() == 3) result.insert(0, 1, L'0');
+    } else {
+        result = std::to_wstring(std::min(99, static_cast<int>(std::lround(percent))));
+        if (result.size() == 1) result.insert(0, 1, L'0');
+    }
+    return result;
+}
+
+std::wstring AppUi::FormatMemoryPercent(double percent, const AppConfig& config) const {
+    percent = std::clamp(percent, 0.0, 99.9);
+    if (config.showPercentDecimal) {
+        std::wstring result = Number(percent, 1);
+        if (result.size() == 3) result.insert(0, 1, L'0');
+        return result;
+    }
+    std::wstring result = std::to_wstring(std::min(99, static_cast<int>(std::lround(percent))));
+    if (result.size() == 1) result.insert(0, 1, L'0');
+    return result;
+}
+
+std::wstring AppUi::FormatMemoryBytes(std::uint64_t bytes) const {
+    constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
+    std::wstring result = Number(std::clamp(static_cast<double>(bytes) / kGiB, 0.0, 99.9), 1);
+    if (result.size() == 3) result.insert(0, 1, L'0');
+    return result;
 }
 
 std::wstring AppUi::FormatPercent(double percent, const AppConfig& config) const {
@@ -630,9 +617,6 @@ std::wstring AppUi::FormatFixedNumber(double value, int width, double maximum) c
         result = std::to_wstring(static_cast<int>(maximum)) + L"+";
     } else {
         result = Number(value, 1);
-    }
-    if (static_cast<int>(result.size()) < width) {
-        result.insert(0, static_cast<size_t>(width - result.size()), L' ');
     }
     if (static_cast<int>(result.size()) > width) {
         result = result.substr(0, static_cast<size_t>(width));
@@ -653,17 +637,17 @@ std::wstring AppUi::MetricsText(const AppConfig& config) const {
     }
     const auto networkText = latest_->networkAvailable && latest_->networkReady
                                  ? config.showNetworkArrows
-                                       ? L"↓" + FormatRate(latest_->networkDownloadBytesPerSecond) + L"  ↑" +
+                                       ? L"↓" + FormatRate(latest_->networkDownloadBytesPerSecond) + L" ↑" +
                                              FormatRate(latest_->networkUploadBytesPerSecond)
-                                       : FormatRate(latest_->networkDownloadBytesPerSecond) + L"  " +
+                                       : FormatRate(latest_->networkDownloadBytesPerSecond) + L" " +
                                              FormatRate(latest_->networkUploadBytesPerSecond)
-                                 : config_.showNetworkArrows ? L"↓  N/A    ↑  N/A  " : L"  N/A    N/A  ";
+                                 : config_.showNetworkArrows ? L"↓N/A ↑N/A" : L"N/A N/A";
     if (config.hudNetworkOnly) {
         return config.showNetwork ? networkText : L"网络已隐藏";
     }
     std::wstring text;
-    const auto appendToken = [&text](std::wstring token, size_t slot = 0) {
-        if (!text.empty()) {
+    const auto appendToken = [&text](std::wstring token, size_t slot = 0, bool separator = true) {
+        if (!text.empty() && separator) {
             text += L" ";
         }
         text += std::move(token);
@@ -674,15 +658,15 @@ std::wstring AppUi::MetricsText(const AppConfig& config) const {
         }
     };
     if (config.showCpu) {
-        appendToken(L"C" + FormatPercent(latest_->cpuPercent, config), 6);
+        appendToken(L"C" + FormatCpuPercent(latest_->cpuPercent, config));
     }
     if (config.showMemory) {
         if (latest_->memoryTotalBytes == 0) {
-            appendToken(L"N/A", 5);
+            appendToken(L"N/A", 4);
         } else if (config.memoryShowPercent) {
-            appendToken(FormatPercent(latest_->memoryPercent, config), 5);
+            appendToken(FormatMemoryPercent(latest_->memoryPercent, config));
         } else {
-            appendToken(FormatBytes(latest_->memoryUsedBytes), 5);
+            appendToken(FormatMemoryBytes(latest_->memoryUsedBytes));
         }
     }
     if (config.showGpu) {
@@ -698,14 +682,15 @@ std::wstring AppUi::MetricsText(const AppConfig& config) const {
                                           : FormatBytes(latest_->gpuMemoryUsedBytes)
                                     : L"  N/A";
             appendToken(L"G" + FormatPercent(latest_->gpuUtilPercent, config) + L"/" +
-                        memory, 12);
+                        memory, 9);
         } else {
-            appendToken(L"GN/A/N/A", 12);
+            appendToken(L"GN/A/N/A", 9);
         }
     }
     if (config.showNetwork) {
         appendToken(networkText);
     }
+    while (!text.empty() && text.back() == L' ') text.pop_back();
     return text.empty() ? L"SysGlance" : text;
 }
 

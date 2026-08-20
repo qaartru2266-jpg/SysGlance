@@ -21,6 +21,8 @@
 | `tests/` | 不依赖 UI 的计算与边界测试。 |
 | `docs/` | 产品口径、开发状态和验证记录。 |
 | `scripts/build-release.ps1` | 当前开发机的 NMake Release 构建、CTest 和可执行文件复制流程。 |
+| `scripts/package-portable.ps1` | 独立 Release 候选包构建与 zip 打包；不会覆盖 `build\Release`。 |
+| `.github/workflows/release.yml` | 推送 `v*` 标签时的 GitHub Windows 构建、测试、压缩与 Release 流程。 |
 
 ## 修改规则
 
