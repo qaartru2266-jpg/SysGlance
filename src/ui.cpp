@@ -58,6 +58,9 @@ constexpr int kTaskbarModeMenuId = 311;
 constexpr int kHudModeMenuId = 312;
 constexpr int kTaskbarWidth = 360;
 constexpr int kTaskbarHeight = 30;
+constexpr int kSettingsWidthDip = 570;
+constexpr int kSettingsContentHeightDip = 1010;
+constexpr int kSettingsWindowMarginDip = 32;
 
 std::wstring Number(double value, int precision = 0) {
     std::wstringstream stream;
@@ -136,6 +139,10 @@ AppUi::~AppUi() {
     DestroySurfaces();
     if (settingsWindow_ != nullptr) {
         DestroyWindow(settingsWindow_);
+    }
+    if (settingsFont_ != nullptr) {
+        DeleteObject(settingsFont_);
+        settingsFont_ = nullptr;
     }
     if (mainWindow_ != nullptr) {
         DestroyWindow(mainWindow_);
@@ -635,13 +642,17 @@ std::wstring AppUi::MetricsText(const AppConfig& config) const {
     if (!latest_) {
         return L"SysGlance";
     }
-    const auto networkText = latest_->networkAvailable && latest_->networkReady
-                                 ? config.showNetworkArrows
-                                       ? L"↓" + FormatRate(latest_->networkDownloadBytesPerSecond) + L" ↑" +
-                                             FormatRate(latest_->networkUploadBytesPerSecond)
-                                       : FormatRate(latest_->networkDownloadBytesPerSecond) + L" " +
-                                             FormatRate(latest_->networkUploadBytesPerSecond)
-                                 : config_.showNetworkArrows ? L"↓N/A ↑N/A" : L"N/A N/A";
+    // Each network rate is a five-character slot regardless of its magnitude
+    // or whether the first sample is still establishing a baseline. That keeps
+    // the complete HUD text length and its centered column positions stable.
+    const bool networkReady = latest_->networkAvailable && latest_->networkReady;
+    const auto downRate = networkReady ? FormatRate(latest_->networkDownloadBytesPerSecond)
+                                       : FormatUnavailableNetworkRate();
+    const auto upRate = networkReady ? FormatRate(latest_->networkUploadBytesPerSecond)
+                                     : FormatUnavailableNetworkRate();
+    const auto networkText = config.showNetworkArrows
+                                 ? L"↓" + downRate + L" ↑" + upRate
+                                 : downRate + L" " + upRate;
     if (config.hudNetworkOnly) {
         return config.showNetwork ? networkText : L"网络已隐藏";
     }
@@ -760,17 +771,26 @@ void AppUi::ShowTrayMenu(POINT point) {
 
 void AppUi::ShowSettings() {
     if (settingsWindow_ == nullptr) {
+        const UINT dpi = GetDpiForSystem();
+        const DWORD style = WS_OVERLAPPEDWINDOW | WS_VSCROLL;
+        RECT windowRect{0, 0, PixelsFromDip(kSettingsWidthDip, dpi),
+                        PixelsFromDip(kSettingsContentHeightDip, dpi)};
+        AdjustWindowRectExForDpi(&windowRect, style, FALSE, WS_EX_DLGMODALFRAME, dpi);
         settingsWindow_ = CreateWindowExW(WS_EX_DLGMODALFRAME, kSettingsClass, L"SysGlance 设置",
-                                          WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                                          CW_USEDEFAULT, CW_USEDEFAULT, 570, 1020, nullptr, nullptr,
+                                          style, CW_USEDEFAULT, CW_USEDEFAULT,
+                                          windowRect.right - windowRect.left,
+                                          windowRect.bottom - windowRect.top, nullptr, nullptr,
                                           instance_, this);
         if (settingsWindow_ == nullptr) return;
         BuildSettingsControls(settingsWindow_);
+        ScaleSettingsControls(GetDpiForWindow(settingsWindow_));
     }
     settingsDraft_ = config_;
     PopulateDeviceSelectors();
     UpdateSettingsButtonState();
     ShowWindow(settingsWindow_, SW_SHOWNORMAL);
+    FitSettingsWindowToWorkArea();
+    UpdateSettingsScrollBar();
     SetForegroundWindow(settingsWindow_);
 }
 
@@ -974,6 +994,122 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
                                nullptr, nullptr);
     SetControlFont(apply);
     SetControlFont(close);
+}
+
+void AppUi::ScaleSettingsControls(UINT dpi) {
+    if (settingsWindow_ == nullptr || dpi == 0) return;
+
+    // Child positions are authored in 96-DPI logical pixels. Resetting the
+    // scroll position first makes the current bounds suitable for proportional
+    // scaling when the window moves between monitors.
+    ScrollSettingsTo(0);
+    const UINT oldDpi = settingsDpi_ == 0 ? 96 : settingsDpi_;
+    if (oldDpi != dpi) {
+        for (HWND child = GetWindow(settingsWindow_, GW_CHILD); child != nullptr;
+             child = GetWindow(child, GW_HWNDNEXT)) {
+            RECT bounds{};
+            GetWindowRect(child, &bounds);
+            MapWindowPoints(nullptr, settingsWindow_, reinterpret_cast<POINT*>(&bounds), 2);
+            SetWindowPos(child, nullptr,
+                         MulDiv(bounds.left, static_cast<int>(dpi), static_cast<int>(oldDpi)),
+                         MulDiv(bounds.top, static_cast<int>(dpi), static_cast<int>(oldDpi)),
+                         std::max(1, MulDiv(bounds.right - bounds.left, static_cast<int>(dpi),
+                                            static_cast<int>(oldDpi))),
+                         std::max(1, MulDiv(bounds.bottom - bounds.top, static_cast<int>(dpi),
+                                            static_cast<int>(oldDpi))),
+                         SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+    }
+    settingsDpi_ = dpi;
+    settingsContentHeight_ = PixelsFromDip(kSettingsContentHeightDip, dpi);
+    UpdateSettingsControlFont();
+    UpdateSettingsScrollBar();
+}
+
+void AppUi::FitSettingsWindowToWorkArea() {
+    if (settingsWindow_ == nullptr) return;
+
+    const UINT dpi = GetDpiForWindow(settingsWindow_);
+    const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(settingsWindow_, GWL_STYLE));
+    const DWORD extendedStyle = static_cast<DWORD>(GetWindowLongPtrW(settingsWindow_, GWL_EXSTYLE));
+    RECT desired{0, 0, PixelsFromDip(kSettingsWidthDip, dpi),
+                 PixelsFromDip(kSettingsContentHeightDip, dpi)};
+    AdjustWindowRectExForDpi(&desired, style, FALSE, extendedStyle, dpi);
+
+    MONITORINFO monitor{sizeof(MONITORINFO)};
+    GetMonitorInfoW(MonitorFromWindow(settingsWindow_, MONITOR_DEFAULTTONEAREST), &monitor);
+    const int margin = PixelsFromDip(kSettingsWindowMarginDip, dpi);
+    const int workWidth = static_cast<int>(monitor.rcWork.right - monitor.rcWork.left);
+    const int workHeight = static_cast<int>(monitor.rcWork.bottom - monitor.rcWork.top);
+    const int maxWidth = std::max(1, workWidth - margin);
+    const int maxHeight = std::max(1, workHeight - margin);
+    const int desiredWidth = static_cast<int>(desired.right - desired.left);
+    const int desiredHeight = static_cast<int>(desired.bottom - desired.top);
+    const int width = std::min(desiredWidth, maxWidth);
+    const int height = std::min(desiredHeight, maxHeight);
+
+    SetWindowPos(settingsWindow_, nullptr,
+                 monitor.rcWork.left + (monitor.rcWork.right - monitor.rcWork.left - width) / 2,
+                 monitor.rcWork.top + (monitor.rcWork.bottom - monitor.rcWork.top - height) / 2,
+                 width, height, SWP_NOACTIVATE | SWP_NOZORDER);
+}
+
+void AppUi::UpdateSettingsScrollBar() {
+    if (settingsWindow_ == nullptr || settingsContentHeight_ == 0) return;
+
+    RECT client{};
+    GetClientRect(settingsWindow_, &client);
+    const int page = std::max(1, static_cast<int>(client.bottom - client.top));
+    const int maximum = std::max(0, settingsContentHeight_ - page);
+    if (settingsScrollPosition_ > maximum) {
+        ScrollSettingsTo(maximum);
+        return;
+    }
+
+    SCROLLINFO info{sizeof(SCROLLINFO)};
+    info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    info.nMin = 0;
+    info.nMax = std::max(0, settingsContentHeight_ - 1);
+    info.nPage = static_cast<UINT>(page);
+    info.nPos = settingsScrollPosition_;
+    SetScrollInfo(settingsWindow_, SB_VERT, &info, TRUE);
+    ShowScrollBar(settingsWindow_, SB_VERT, maximum > 0);
+}
+
+void AppUi::ScrollSettingsTo(int position) {
+    if (settingsWindow_ == nullptr || settingsContentHeight_ == 0) return;
+
+    RECT client{};
+    GetClientRect(settingsWindow_, &client);
+    const int clientHeight = static_cast<int>(client.bottom - client.top);
+    const int maximum = std::max(0, settingsContentHeight_ - clientHeight);
+    const int next = std::clamp(position, 0, maximum);
+    if (next == settingsScrollPosition_) return;
+
+    const int delta = settingsScrollPosition_ - next;
+    ScrollWindowEx(settingsWindow_, 0, delta, nullptr, nullptr, nullptr, nullptr,
+                   SW_ERASE | SW_INVALIDATE | SW_SCROLLCHILDREN);
+    settingsScrollPosition_ = next;
+    SCROLLINFO info{sizeof(SCROLLINFO)};
+    info.fMask = SIF_POS;
+    info.nPos = settingsScrollPosition_;
+    SetScrollInfo(settingsWindow_, SB_VERT, &info, TRUE);
+}
+
+void AppUi::UpdateSettingsControlFont() {
+    if (settingsWindow_ == nullptr) return;
+    const int height = -std::max(1, MulDiv(9, static_cast<int>(settingsDpi_), 72));
+    HFONT font = CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                             DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    if (font == nullptr) return;
+    HFONT previous = settingsFont_;
+    settingsFont_ = font;
+    for (HWND child = GetWindow(settingsWindow_, GW_CHILD); child != nullptr;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+        SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(settingsFont_), TRUE);
+    }
+    if (previous != nullptr) DeleteObject(previous);
 }
 
 void AppUi::PopulateDeviceSelectors() {
@@ -1396,6 +1532,45 @@ LRESULT AppUi::HandleSurfaceMessage(HWND hwnd, UINT message, WPARAM wParam, LPAR
 
 LRESULT AppUi::HandleSettingsMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+        case WM_SIZE:
+            UpdateSettingsScrollBar();
+            return 0;
+        case WM_DPICHANGED: {
+            const auto* suggested = reinterpret_cast<const RECT*>(lParam);
+            if (suggested != nullptr) {
+                SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                             suggested->right - suggested->left, suggested->bottom - suggested->top,
+                             SWP_NOACTIVATE | SWP_NOZORDER);
+            }
+            ScaleSettingsControls(HIWORD(wParam));
+            FitSettingsWindowToWorkArea();
+            return 0;
+        }
+        case WM_VSCROLL: {
+            SCROLLINFO info{sizeof(SCROLLINFO)};
+            info.fMask = SIF_ALL;
+            GetScrollInfo(hwnd, SB_VERT, &info);
+            int next = settingsScrollPosition_;
+            const int line = PixelsFromDip(28.0f, settingsDpi_);
+            switch (LOWORD(wParam)) {
+                case SB_LINEUP: next -= line; break;
+                case SB_LINEDOWN: next += line; break;
+                case SB_PAGEUP: next -= static_cast<int>(info.nPage); break;
+                case SB_PAGEDOWN: next += static_cast<int>(info.nPage); break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION: next = info.nTrackPos; break;
+                case SB_TOP: next = 0; break;
+                case SB_BOTTOM: next = info.nMax; break;
+                default: return 0;
+            }
+            ScrollSettingsTo(next);
+            return 0;
+        }
+        case WM_MOUSEWHEEL:
+            ScrollSettingsTo(settingsScrollPosition_ -
+                             (GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) *
+                                 PixelsFromDip(48.0f, settingsDpi_));
+            return 0;
         case WM_DRAWITEM: {
             const auto* draw = reinterpret_cast<const DRAWITEMSTRUCT*>(lParam);
             if (draw != nullptr && draw->CtlID == kSettingsPreviewId) {
@@ -1469,6 +1644,13 @@ LRESULT AppUi::HandleSettingsMessage(HWND hwnd, UINT message, WPARAM wParam, LPA
         case WM_DESTROY:
             settingsWindow_ = nullptr;
             settingsPreview_ = nullptr;
+            if (settingsFont_ != nullptr) {
+                DeleteObject(settingsFont_);
+                settingsFont_ = nullptr;
+            }
+            settingsContentHeight_ = 0;
+            settingsScrollPosition_ = 0;
+            settingsDpi_ = 96;
             return 0;
         default:
             break;

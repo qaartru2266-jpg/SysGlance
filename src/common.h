@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <memory>
@@ -127,7 +128,10 @@ inline bool IsKnownRefreshInterval(int value) {
 
 // Compact network rate for HUD/tray. Never uses raw bytes or the B suffix.
 // Below 100 KiB/s keeps one-decimal K (0.0K .. 99.9K); at/above that threshold
-// switches to M so ~100 KiB/s reads as 0.1M. Number width 4, magnitude width 1.
+// switches to M so ~100 KiB/s reads as 0.1M. The full HUD field is always five
+// characters: four for the right-aligned number and one for its K/M magnitude.
+inline constexpr std::size_t kHudNetworkRateSlotWidth = 5;
+
 inline std::wstring FormatNetworkRate(double bytesPerSecond) {
     constexpr double kKiB = 1024.0;
     constexpr double kMiB = kKiB * kKiB;
@@ -146,6 +150,12 @@ inline std::wstring FormatNetworkRate(double bytesPerSecond) {
         number.insert(0, 4 - number.size(), L' ');
     }
     return number + (useMib ? L"M" : L"K");
+}
+
+inline std::wstring FormatUnavailableNetworkRate() {
+    // Keep an unavailable first sample in the same slot as a real rate. Without
+    // this, the HUD would visibly grow when a network baseline becomes ready.
+    return L"  N/A";
 }
 
 }  // namespace sysglance

@@ -67,6 +67,11 @@ private:
     void ResetSettingsDraft(bool recommended);
     void PopulateDeviceSelectors();
     void BuildSettingsControls(HWND hwnd);
+    void ScaleSettingsControls(UINT dpi);
+    void FitSettingsWindowToWorkArea();
+    void UpdateSettingsScrollBar();
+    void ScrollSettingsTo(int position);
+    void UpdateSettingsControlFont();
     void CreateTextFormat();
     void UpdateTrayTooltip();
     void ShowTrayMenu(POINT point);
@@ -128,6 +133,10 @@ private:
     HWND includeVirtualNetworkCheck_ = nullptr;
     HWND gpuAdapterCombo_ = nullptr;
     HWND previewWarning_ = nullptr;
+    HFONT settingsFont_ = nullptr;
+    UINT settingsDpi_ = 96;
+    int settingsContentHeight_ = 0;
+    int settingsScrollPosition_ = 0;
 
     bool hudDragging_ = false;
     bool hudLayoutDirty_ = true;
