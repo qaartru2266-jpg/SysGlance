@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   build-release:
-    runs-on: windows-latest
+    # Keep the Visual Studio 2022 generator below stable. windows-latest can
+    # advance to a newer image where this generator is no longer available.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Configure
