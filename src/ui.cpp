@@ -62,7 +62,7 @@ constexpr int kSettingsWidthDip = 570;
 constexpr int kSettingsContentHeightDip = 1010;
 constexpr int kSettingsWindowMarginDip = 32;
 constexpr DWORD kSettingsComboStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
-                                     CBS_DROPDOWNLIST | CBS_NOINTEGRALHEIGHT;
+                                     CBS_DROPDOWNLIST;
 
 std::wstring Number(double value, int precision = 0) {
     std::wstringstream stream;
@@ -1133,8 +1133,11 @@ void AppUi::ConfigureSettingsCombo(HWND combo) const {
         SendMessageW(combo, CB_SETITEMHEIGHT, static_cast<WPARAM>(index), itemHeight);
     }
 
-    // A fixed visible-row count gives the system enough information to choose
-    // a below/above popup position inside the current monitor work area.
+    // Let the common control calculate the list height from this visible-row
+    // count. CBS_NOINTEGRALHEIGHT cannot be used here: Windows ignores
+    // CB_SETMINVISIBLE for that style and may leave a one-row popup.
+    // The native control also chooses an above/below position inside the work
+    // area when the combo is close to the bottom edge.
     SendMessageW(combo, CB_SETMINVISIBLE,
                  static_cast<WPARAM>(std::clamp(count, 1, 8)), 0);
 
