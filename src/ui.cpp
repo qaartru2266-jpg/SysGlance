@@ -610,11 +610,15 @@ std::wstring AppUi::FormatMemoryBytes(std::uint64_t bytes) const {
 }
 
 std::wstring AppUi::FormatPercent(double percent, const AppConfig& config) const {
-    percent = std::clamp(percent, 0.0, 100.0);
+    percent = std::clamp(percent, 0.0, 99.9);
     if (config.showPercentDecimal) {
-        return percent >= 99.95 ? L"99+" : Number(percent, 1);
+        std::wstring result = Number(percent, 1);
+        if (result.size() == 3) result.insert(0, 1, L'0');
+        return result;
     }
-    return std::to_wstring(static_cast<int>(std::lround(percent)));
+    std::wstring result = std::to_wstring(std::min(99, static_cast<int>(std::lround(percent))));
+    if (result.size() == 1) result.insert(0, 1, L'0');
+    return result;
 }
 
 std::wstring AppUi::FormatFixedNumber(double value, int width, double maximum) const {
@@ -636,9 +640,6 @@ std::wstring AppUi::FormatRate(double bytesPerSecond) const {
 }
 
 std::wstring AppUi::MetricsText(const AppConfig& config) const {
-    if (GetTickCount64() < hudFeedbackUntil_) {
-        return config.hudNetworkOnly ? L"网络精简" : L"完整显示";
-    }
     if (!latest_) {
         return L"SysGlance";
     }
@@ -681,6 +682,13 @@ std::wstring AppUi::MetricsText(const AppConfig& config) const {
         }
     }
     if (config.showGpu) {
+        // Reserve only the width required by the active GPU representation.
+        // Integer GPU percentage + integer GPU-memory percentage is G04/06
+        // (six characters), so a universal nine-character reserve would leave
+        // an unnecessary visible gap before the network fields.
+        const size_t gpuPercentWidth = config.showPercentDecimal ? 4 : 2;
+        const size_t gpuMemoryWidth = config.gpuMemoryShowPercent ? gpuPercentWidth : 4;
+        const size_t gpuSlotWidth = 2 + gpuPercentWidth + gpuMemoryWidth;  // G + / + values
         if (latest_->gpuAvailable) {
             const auto memory = latest_->gpuMemoryAvailable
                                     ? config.gpuMemoryShowPercent
@@ -693,9 +701,9 @@ std::wstring AppUi::MetricsText(const AppConfig& config) const {
                                           : FormatBytes(latest_->gpuMemoryUsedBytes)
                                     : L"  N/A";
             appendToken(L"G" + FormatPercent(latest_->gpuUtilPercent, config) + L"/" +
-                        memory, 9);
+                        memory, gpuSlotWidth);
         } else {
-            appendToken(L"GN/A/N/A", 9);
+            appendToken(L"GN/A/N/A", gpuSlotWidth);
         }
     }
     if (config.showNetwork) {
@@ -980,7 +988,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
     SetControlFont(recommended);
     SetControlFont(lastGood);
 
-    previewWarning_ = CreateWindowW(L"STATIC", L"提示：双击 HUD 切换网络精简模式。尺寸过小时内容可能裁切。",
+    previewWarning_ = CreateWindowW(L"STATIC", L"提示：右键拖动 HUD；左键不会触发操作。尺寸过小时内容可能裁切。",
                                     WS_CHILD | WS_VISIBLE, 24, 924, 500, 24, hwnd, nullptr, nullptr, nullptr);
     SetControlFont(previewWarning_);
 
@@ -1242,6 +1250,9 @@ void AppUi::ApplySettingsFromControls() {
     UpdateTrayTooltip();
     if (CanRenderHud(config_)) configService_.SaveLastGoodHud(config_);
     settingsDraft_ = config_;
+    if (previewWarning_ != nullptr) {
+        SetWindowTextW(previewWarning_, L"设置已应用并保存。右键拖动 HUD；左键不会触发操作。");
+    }
     InvalidateSettingsPreview();
     return;
 
@@ -1385,10 +1396,7 @@ LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
             }
             if (config_.selectedNetworkLuid != 0) {
                 const auto interfaces = metrics_.NetworkInterfaces();
-                const bool found = std::any_of(interfaces.begin(), interfaces.end(), [this](const auto& item) {
-                    return item.luid == config_.selectedNetworkLuid;
-                });
-                if (!found) {
+                if (ShouldFallbackToAggregateNetwork(config_.selectedNetworkLuid, interfaces)) {
                     config_.selectedNetworkLuid = 0;
                     metrics_.SetNetworkSelection(0, config_.includeVirtualNetworkInterfaces);
                     configService_.Save(config_);
@@ -1449,19 +1457,14 @@ LRESULT AppUi::HandleSurfaceMessage(HWND hwnd, UINT message, WPARAM wParam, LPAR
             if (hud && !config_.hudLocked && !config_.hudClickThrough) return HTCLIENT;
             if (hud) return HTTRANSPARENT;
             return HTCLIENT;
-        case WM_LBUTTONDBLCLK:
-            if (hud && !config_.hudLocked && !config_.hudClickThrough) {
-                config_.hudNetworkOnly = !config_.hudNetworkOnly;
-                hudFeedbackUntil_ = GetTickCount64() + 800;
-                configService_.Save(config_);
-                PositionHudSurface();
-                UpdateTrayTooltip();
-                InvalidateRect(hudWindow_, nullptr, FALSE);
-                InvalidateRect(hudFrameWindow_, nullptr, FALSE);
-                return 0;
-            }
-            break;
         case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+            // HUD left-clicks deliberately do nothing. Settings buttons remain
+            // regular controls in their own window and still use the left button.
+            if (hud) return 0;
+            break;
+        case WM_RBUTTONDOWN:
             if (hud && !config_.hudLocked && !config_.hudClickThrough) {
                 GetCursorPos(&hudDragStartCursor_);
                 GetWindowRect(hudFrameWindow_, &hudDragStartRect_);
@@ -1479,7 +1482,7 @@ LRESULT AppUi::HandleSurfaceMessage(HWND hwnd, UINT message, WPARAM wParam, LPAR
                 return 0;
             }
             break;
-        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
             if (hud && hudDragging_) {
                 hudDragging_ = false;
                 if (GetCapture() == hwnd) {
@@ -1488,6 +1491,10 @@ LRESULT AppUi::HandleSurfaceMessage(HWND hwnd, UINT message, WPARAM wParam, LPAR
                 SaveHudPlacement();
                 return 0;
             }
+            break;
+        case WM_RBUTTONDBLCLK:
+        case WM_CONTEXTMENU:
+            if (hud) return 0;
             break;
         case WM_CAPTURECHANGED:
             if (hudDragging_) {
@@ -1593,7 +1600,7 @@ LRESULT AppUi::HandleSettingsMessage(HWND hwnd, UINT message, WPARAM wParam, LPA
                     AppConfig preview = *settingsDraft_;
                     ReadSettingsControls(preview);
                     SetWindowTextW(previewWarning_, CanRenderHud(preview)
-                        ? L"双击 HUD 切换网络精简模式；预览仅为草稿，应用后才会生效。"
+                        ? L"右键拖动 HUD；左键不会触发操作。预览仅为草稿，应用后才会生效。"
                         : L"内容可能裁切：可自由保留该尺寸，或恢复推荐 HUD / 上次可用布局。 ");
                 }
                 InvalidateSettingsPreview();

@@ -54,6 +54,21 @@ struct NetworkInterfaceInfo {
     bool included = false;
 };
 
+// A selected interface can remain in the Windows inventory after it disconnects.
+// Do not fall back until an inventory is available, otherwise the first sampling
+// cycle could erase a valid user selection before enumeration completes.
+inline bool ShouldFallbackToAggregateNetwork(
+    std::uint64_t selectedLuid, const std::vector<NetworkInterfaceInfo>& interfaces) {
+    if (selectedLuid == 0 || interfaces.empty()) {
+        return false;
+    }
+    const auto selected = std::find_if(interfaces.begin(), interfaces.end(),
+                                       [selectedLuid](const NetworkInterfaceInfo& item) {
+                                           return item.luid == selectedLuid;
+                                       });
+    return selected == interfaces.end() || !selected->connected;
+}
+
 struct GpuAdapterInfo {
     std::uint64_t luid = 0;
     std::wstring name;
@@ -69,10 +84,12 @@ struct AppConfig {
     bool showMemory = true;
     bool memoryShowPercent = false;
     bool gpuMemoryShowPercent = false;
-    bool showGpu = true;
+    // Keep the first-run HUD focused on CPU, memory, and network. GPU remains
+    // available from Settings for users who need it.
+    bool showGpu = false;
     bool showNetwork = true;
-    bool showPercentDecimal = true;
-    bool showNetworkArrows = true;
+    bool showPercentDecimal = false;
+    bool showNetworkArrows = false;
     bool includeVirtualNetworkInterfaces = false;
 
     // Zero means aggregate all eligible devices.

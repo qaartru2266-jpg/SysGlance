@@ -75,10 +75,10 @@ AppConfig ConfigService::Load() const {
     config.showMemory = ReadBool(path, kSectionDisplay, L"ShowMemory", true);
     config.memoryShowPercent = ReadBool(path, kSectionDisplay, L"MemoryShowPercent", false);
     config.gpuMemoryShowPercent = ReadBool(path, kSectionDisplay, L"GpuMemoryShowPercent", false);
-    config.showGpu = ReadBool(path, kSectionDisplay, L"ShowGpu", true);
+    config.showGpu = ReadBool(path, kSectionDisplay, L"ShowGpu", false);
     config.showNetwork = ReadBool(path, kSectionDisplay, L"ShowNetwork", true);
-    config.showPercentDecimal = ReadBool(path, kSectionDisplay, L"ShowPercentDecimal", true);
-    config.showNetworkArrows = ReadBool(path, kSectionDisplay, L"ShowNetworkArrows", true);
+    config.showPercentDecimal = ReadBool(path, kSectionDisplay, L"ShowPercentDecimal", false);
+    config.showNetworkArrows = ReadBool(path, kSectionDisplay, L"ShowNetworkArrows", false);
     config.includeVirtualNetworkInterfaces =
         ReadBool(path, kSectionDisplay, L"IncludeVirtualNetworkInterfaces", false);
     config.selectedNetworkLuid = ReadUInt64(path, kSectionDisplay, L"SelectedNetworkLuid", 0);
@@ -90,7 +90,11 @@ AppConfig ConfigService::Load() const {
     if (config.hudClickThrough) {
         config.hudLocked = true;
     }
-    config.hudNetworkOnly = ReadBool(path, kSectionHud, L"NetworkOnly", false);
+    // Network-only mode was formerly toggled by a HUD double-click. HUD left
+    // clicks are intentionally inert now, so migrate any legacy saved state
+    // back to the complete layout rather than leaving users stuck in a mode
+    // they can no longer toggle from the UI.
+    config.hudNetworkOnly = false;
     config.hudOpacity = ReadInt(path, kSectionHud, L"Opacity", 90);
     config.hudWidthDip = ReadInt(path, kSectionHud, L"WidthDip", 360);
     config.hudHeightDip = ReadInt(path, kSectionHud, L"HeightDip", 34);
@@ -141,6 +145,9 @@ AppConfig ConfigService::RecommendedHud(const AppConfig& base) const {
     result.hudLocked = false;
     result.hudClickThrough = false;
     result.hudNetworkOnly = false;
+    result.showGpu = false;
+    result.showPercentDecimal = false;
+    result.showNetworkArrows = false;
     return result;
 }
 

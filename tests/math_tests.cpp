@@ -6,6 +6,19 @@
 using namespace sysglance;
 
 int main() {
+    const AppConfig defaults{};
+    assert(!defaults.showGpu);
+    assert(!defaults.showPercentDecimal);
+    assert(!defaults.showNetworkArrows);
+
+    const std::vector<NetworkInterfaceInfo> connectedNetwork{{1, L"Ethernet", L"", true, true, true}};
+    const std::vector<NetworkInterfaceInfo> disconnectedNetwork{{1, L"Ethernet", L"", false, true, false}};
+    assert(!ShouldFallbackToAggregateNetwork(0, connectedNetwork));
+    assert(!ShouldFallbackToAggregateNetwork(1, connectedNetwork));
+    assert(ShouldFallbackToAggregateNetwork(1, disconnectedNetwork));
+    assert(ShouldFallbackToAggregateNetwork(2, connectedNetwork));
+    assert(!ShouldFallbackToAggregateNetwork(1, {}));
+
     assert(SaturatingDelta(100, 40) == 60);
     assert(SaturatingDelta(40, 100) == 0);
     assert(BytesPerSecond(2000, 1000, 1000) == 1000);
