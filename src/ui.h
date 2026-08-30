@@ -72,6 +72,8 @@ private:
     void UpdateSettingsScrollBar();
     void ScrollSettingsTo(int position);
     void UpdateSettingsControlFont();
+    void ConfigureSettingsCombo(HWND combo) const;
+    void ConfigureSettingsCombos() const;
     void CreateTextFormat();
     void UpdateTrayTooltip();
     void ShowTrayMenu(POINT point);

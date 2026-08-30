@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SysGlance VERSION 0.1.0 LANGUAGES CXX RC)
+project(SysGlance VERSION 1.0.0 LANGUAGES CXX RC)
 
 include(CTest)
 

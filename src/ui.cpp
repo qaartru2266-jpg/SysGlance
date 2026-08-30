@@ -61,6 +61,8 @@ constexpr int kTaskbarHeight = 30;
 constexpr int kSettingsWidthDip = 570;
 constexpr int kSettingsContentHeightDip = 1010;
 constexpr int kSettingsWindowMarginDip = 32;
+constexpr DWORD kSettingsComboStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
+                                     CBS_DROPDOWNLIST | CBS_NOINTEGRALHEIGHT;
 
 std::wstring Number(double value, int precision = 0) {
     std::wstringstream stream;
@@ -780,7 +782,7 @@ void AppUi::ShowTrayMenu(POINT point) {
 void AppUi::ShowSettings() {
     if (settingsWindow_ == nullptr) {
         const UINT dpi = GetDpiForSystem();
-        const DWORD style = WS_OVERLAPPEDWINDOW | WS_VSCROLL;
+        const DWORD style = WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_CLIPCHILDREN;
         RECT windowRect{0, 0, PixelsFromDip(kSettingsWidthDip, dpi),
                         PixelsFromDip(kSettingsContentHeightDip, dpi)};
         AdjustWindowRectExForDpi(&windowRect, style, FALSE, WS_EX_DLGMODALFRAME, dpi);
@@ -818,7 +820,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
     };
 
     label(L"显示模式", 24, 22, 120);
-    modeCombo_ = CreateWindowW(L"COMBOBOX", nullptr, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
+    modeCombo_ = CreateWindowW(L"COMBOBOX", nullptr, kSettingsComboStyle,
                                180, 18, 340, 120, hwnd,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kModeComboId)),
                                nullptr, nullptr);
@@ -829,8 +831,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
     SetControlFont(modeCombo_);
 
     label(L"刷新间隔", 24, 60, 120);
-    intervalCombo_ = CreateWindowW(L"COMBOBOX", nullptr,
-                                   WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 56, 160, 120,
+    intervalCombo_ = CreateWindowW(L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 56, 160, 120,
                                    hwnd,
                                    reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIntervalComboId)),
                                    nullptr, nullptr);
@@ -850,7 +851,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
 
     label(L"内存显示方式", 24, 162, 150);
     memoryModeCombo_ = CreateWindowW(
-        L"COMBOBOX", nullptr, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 158, 220, 120,
+        L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 158, 220, 120,
         hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kMemoryModeComboId)), nullptr,
         nullptr);
     SendMessageW(memoryModeCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"实际已用内存（GiB，不带单位）"));
@@ -859,7 +860,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
 
     label(L"GPU 内存显示方式", 24, 198, 150);
     gpuMemoryModeCombo_ = CreateWindowW(
-        L"COMBOBOX", nullptr, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 194, 220, 120,
+        L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 194, 220, 120,
         hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kGpuMemoryModeComboId)), nullptr,
         nullptr);
     SendMessageW(gpuMemoryModeCombo_, CB_ADDSTRING, 0,
@@ -870,7 +871,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
 
     label(L"百分比精度", 24, 234, 150);
     percentPrecisionCombo_ = CreateWindowW(
-        L"COMBOBOX", nullptr, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 230, 220, 120,
+        L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 230, 220, 120,
         hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kPercentPrecisionComboId)), nullptr,
         nullptr);
     SendMessageW(percentPrecisionCombo_, CB_ADDSTRING, 0,
@@ -937,7 +938,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
 
     label(L"配色预设", 24, 660, 120);
     colorPresetCombo_ = CreateWindowW(
-        L"COMBOBOX", nullptr, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 656, 220, 120, hwnd,
+        L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 656, 220, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kColorPresetComboId)), nullptr, nullptr);
     SendMessageW(colorPresetCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"夜橙深色（默认）"));
     SendMessageW(colorPresetCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"冰蓝浅色"));
@@ -964,7 +965,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
 
     label(L"网络来源", 24, 764, 120);
     networkInterfaceCombo_ = CreateWindowW(L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 760, 330, 160, hwnd,
+        kSettingsComboStyle, 180, 760, 330, 160, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kNetworkInterfaceComboId)), nullptr, nullptr);
     SetControlFont(networkInterfaceCombo_);
     includeVirtualNetworkCheck_ = check(L"包含 VPN / 虚拟接口", kIncludeVirtualNetworkCheckId,
@@ -972,7 +973,7 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
 
     label(L"GPU 来源", 24, 824, 120);
     gpuAdapterCombo_ = CreateWindowW(L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 180, 820, 330, 160, hwnd,
+        kSettingsComboStyle, 180, 820, 330, 160, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kGpuAdapterComboId)), nullptr, nullptr);
     SetControlFont(gpuAdapterCombo_);
     label(L"默认汇总全部设备；GPU 内存可能包含共享内存。", 180, 848, 330);
@@ -1031,6 +1032,7 @@ void AppUi::ScaleSettingsControls(UINT dpi) {
     settingsDpi_ = dpi;
     settingsContentHeight_ = PixelsFromDip(kSettingsContentHeightDip, dpi);
     UpdateSettingsControlFont();
+    ConfigureSettingsCombos();
     UpdateSettingsScrollBar();
 }
 
@@ -1120,6 +1122,40 @@ void AppUi::UpdateSettingsControlFont() {
     if (previous != nullptr) DeleteObject(previous);
 }
 
+void AppUi::ConfigureSettingsCombo(HWND combo) const {
+    if (combo == nullptr) return;
+
+    const UINT dpi = GetDpiForWindow(combo);
+    const int itemHeight = std::max(1, PixelsFromDip(22.0f, dpi));
+    const int count = static_cast<int>(SendMessageW(combo, CB_GETCOUNT, 0, 0));
+    SendMessageW(combo, CB_SETITEMHEIGHT, static_cast<WPARAM>(-1), itemHeight);
+    for (int index = 0; index < count; ++index) {
+        SendMessageW(combo, CB_SETITEMHEIGHT, static_cast<WPARAM>(index), itemHeight);
+    }
+
+    // A fixed visible-row count gives the system enough information to choose
+    // a below/above popup position inside the current monitor work area.
+    SendMessageW(combo, CB_SETMINVISIBLE,
+                 static_cast<WPARAM>(std::clamp(count, 1, 8)), 0);
+
+    RECT client{};
+    GetClientRect(combo, &client);
+    const int width = std::max(static_cast<int>(client.right - client.left),
+                               PixelsFromDip(420.0f, dpi));
+    SendMessageW(combo, CB_SETDROPPEDWIDTH, static_cast<WPARAM>(width), 0);
+}
+
+void AppUi::ConfigureSettingsCombos() const {
+    ConfigureSettingsCombo(modeCombo_);
+    ConfigureSettingsCombo(intervalCombo_);
+    ConfigureSettingsCombo(memoryModeCombo_);
+    ConfigureSettingsCombo(gpuMemoryModeCombo_);
+    ConfigureSettingsCombo(percentPrecisionCombo_);
+    ConfigureSettingsCombo(colorPresetCombo_);
+    ConfigureSettingsCombo(networkInterfaceCombo_);
+    ConfigureSettingsCombo(gpuAdapterCombo_);
+}
+
 void AppUi::PopulateDeviceSelectors() {
     if (networkInterfaceCombo_ != nullptr) {
         SendMessageW(networkInterfaceCombo_, CB_RESETCONTENT, 0, 0);
@@ -1148,6 +1184,7 @@ void AppUi::PopulateDeviceSelectors() {
                          static_cast<LPARAM>(item.luid));
         }
     }
+    ConfigureSettingsCombos();
 }
 
 void AppUi::ReadSettingsControls(AppConfig& config) const {
@@ -1587,6 +1624,13 @@ LRESULT AppUi::HandleSettingsMessage(HWND hwnd, UINT message, WPARAM wParam, LPA
             break;
         }
         case WM_COMMAND:
+            if (HIWORD(wParam) == CBN_DROPDOWN) {
+                HWND combo = reinterpret_cast<HWND>(lParam);
+                ConfigureSettingsCombo(combo);
+                SetWindowPos(combo, HWND_TOP, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                return 0;
+            }
             if (LOWORD(wParam) == kColorPresetComboId && HIWORD(wParam) == CBN_SELCHANGE &&
                 settingsDraft_) {
                 const int preset = static_cast<int>(SendMessageW(colorPresetCombo_, CB_GETCURSEL, 0, 0));
