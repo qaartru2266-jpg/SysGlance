@@ -24,6 +24,6 @@ private:
                                     const wchar_t* key, std::uint64_t fallback);
 };
 
-void SetAutoStart(bool enabled);
+bool SetAutoStart(bool enabled);
 
 }  // namespace sysglance

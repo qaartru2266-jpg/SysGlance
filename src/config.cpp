@@ -21,8 +21,8 @@ std::wstring LocalAppData() {
     return L".";
 }
 
-void WriteBool(const std::wstring& path, const wchar_t* section, const wchar_t* key, bool value) {
-    WritePrivateProfileStringW(section, key, value ? L"1" : L"0", path.c_str());
+bool WriteBool(const std::wstring& path, const wchar_t* section, const wchar_t* key, bool value) {
+    return WritePrivateProfileStringW(section, key, value ? L"1" : L"0", path.c_str()) != FALSE;
 }
 
 }  // namespace
@@ -160,64 +160,50 @@ bool ConfigService::Save(const AppConfig& config) const {
     }
 
     const auto path = Path();
-    WritePrivateProfileStringW(kSectionGeneral, L"DisplayMode",
-                               std::to_wstring(static_cast<int>(config.displayMode)).c_str(),
-                               path.c_str());
-    WritePrivateProfileStringW(kSectionGeneral, L"RefreshIntervalMs",
-                               std::to_wstring(config.refreshIntervalMs).c_str(), path.c_str());
-    WriteBool(path, kSectionGeneral, L"AutoStart", config.autoStart);
-    WritePrivateProfileStringW(kSectionDisplay, L"FontSize",
-                               std::to_wstring(config.fontSize).c_str(), path.c_str());
+    bool saved = true;
+    const auto write = [&](const wchar_t* section, const wchar_t* key, const std::wstring& value) {
+        saved = WritePrivateProfileStringW(section, key, value.c_str(), path.c_str()) != FALSE && saved;
+    };
+    const auto writeBool = [&](const wchar_t* section, const wchar_t* key, bool value) {
+        saved = WriteBool(path, section, key, value) && saved;
+    };
 
-    WriteBool(path, kSectionDisplay, L"ShowCpu", config.showCpu);
-    WriteBool(path, kSectionDisplay, L"ShowMemory", config.showMemory);
-    WriteBool(path, kSectionDisplay, L"MemoryShowPercent", config.memoryShowPercent);
-    WriteBool(path, kSectionDisplay, L"GpuMemoryShowPercent", config.gpuMemoryShowPercent);
-    WriteBool(path, kSectionDisplay, L"ShowGpu", config.showGpu);
-    WriteBool(path, kSectionDisplay, L"ShowNetwork", config.showNetwork);
-    WriteBool(path, kSectionDisplay, L"ShowPercentDecimal", config.showPercentDecimal);
-    WriteBool(path, kSectionDisplay, L"ShowNetworkArrows", config.showNetworkArrows);
-    WriteBool(path, kSectionDisplay, L"IncludeVirtualNetworkInterfaces",
-              config.includeVirtualNetworkInterfaces);
-    WritePrivateProfileStringW(kSectionDisplay, L"SelectedNetworkLuid",
-                               std::to_wstring(config.selectedNetworkLuid).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionDisplay, L"SelectedGpuLuid",
-                               std::to_wstring(config.selectedGpuLuid).c_str(), path.c_str());
-    WriteBool(path, kSectionDisplay, L"DarkTheme", config.darkTheme);
+    write(kSectionGeneral, L"DisplayMode", std::to_wstring(static_cast<int>(config.displayMode)));
+    write(kSectionGeneral, L"RefreshIntervalMs", std::to_wstring(config.refreshIntervalMs));
+    writeBool(kSectionGeneral, L"AutoStart", config.autoStart);
+    write(kSectionDisplay, L"FontSize", std::to_wstring(config.fontSize));
 
-    WriteBool(path, kSectionHud, L"Locked", config.hudLocked);
-    WriteBool(path, kSectionHud, L"ClickThrough", config.hudClickThrough);
-    WriteBool(path, kSectionHud, L"NetworkOnly", config.hudNetworkOnly);
-    WritePrivateProfileStringW(kSectionHud, L"LayoutVersion", L"2", path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"Opacity",
-                               std::to_wstring(config.hudOpacity).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"WidthDip",
-                               std::to_wstring(config.hudWidthDip).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"HeightDip",
-                               std::to_wstring(config.hudHeightDip).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"BorderColor",
-                               std::to_wstring(static_cast<unsigned long>(config.hudBorderColor)).c_str(),
-                               path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"TextColor",
-                               std::to_wstring(static_cast<unsigned long>(config.hudTextColor)).c_str(),
-                               path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"BackgroundColor",
-                               std::to_wstring(static_cast<unsigned long>(config.hudBackgroundColor)).c_str(),
-                               path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"BorderThicknessTenths",
-                               std::to_wstring(config.hudBorderThicknessTenths).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"ColorPreset",
-                               std::to_wstring(config.hudColorPreset).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"Left",
-                               std::to_wstring(config.hudRect.left).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"Top",
-                               std::to_wstring(config.hudRect.top).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"Right",
-                               std::to_wstring(config.hudRect.right).c_str(), path.c_str());
-    WritePrivateProfileStringW(kSectionHud, L"Bottom",
-                               std::to_wstring(config.hudRect.bottom).c_str(), path.c_str());
-    WritePrivateProfileStringW(nullptr, nullptr, nullptr, path.c_str());
-    return true;
+    writeBool(kSectionDisplay, L"ShowCpu", config.showCpu);
+    writeBool(kSectionDisplay, L"ShowMemory", config.showMemory);
+    writeBool(kSectionDisplay, L"MemoryShowPercent", config.memoryShowPercent);
+    writeBool(kSectionDisplay, L"GpuMemoryShowPercent", config.gpuMemoryShowPercent);
+    writeBool(kSectionDisplay, L"ShowGpu", config.showGpu);
+    writeBool(kSectionDisplay, L"ShowNetwork", config.showNetwork);
+    writeBool(kSectionDisplay, L"ShowPercentDecimal", config.showPercentDecimal);
+    writeBool(kSectionDisplay, L"ShowNetworkArrows", config.showNetworkArrows);
+    writeBool(kSectionDisplay, L"IncludeVirtualNetworkInterfaces", config.includeVirtualNetworkInterfaces);
+    write(kSectionDisplay, L"SelectedNetworkLuid", std::to_wstring(config.selectedNetworkLuid));
+    write(kSectionDisplay, L"SelectedGpuLuid", std::to_wstring(config.selectedGpuLuid));
+    writeBool(kSectionDisplay, L"DarkTheme", config.darkTheme);
+
+    writeBool(kSectionHud, L"Locked", config.hudLocked);
+    writeBool(kSectionHud, L"ClickThrough", config.hudClickThrough);
+    writeBool(kSectionHud, L"NetworkOnly", config.hudNetworkOnly);
+    write(kSectionHud, L"LayoutVersion", L"2");
+    write(kSectionHud, L"Opacity", std::to_wstring(config.hudOpacity));
+    write(kSectionHud, L"WidthDip", std::to_wstring(config.hudWidthDip));
+    write(kSectionHud, L"HeightDip", std::to_wstring(config.hudHeightDip));
+    write(kSectionHud, L"BorderColor", std::to_wstring(static_cast<unsigned long>(config.hudBorderColor)));
+    write(kSectionHud, L"TextColor", std::to_wstring(static_cast<unsigned long>(config.hudTextColor)));
+    write(kSectionHud, L"BackgroundColor", std::to_wstring(static_cast<unsigned long>(config.hudBackgroundColor)));
+    write(kSectionHud, L"BorderThicknessTenths", std::to_wstring(config.hudBorderThicknessTenths));
+    write(kSectionHud, L"ColorPreset", std::to_wstring(config.hudColorPreset));
+    write(kSectionHud, L"Left", std::to_wstring(config.hudRect.left));
+    write(kSectionHud, L"Top", std::to_wstring(config.hudRect.top));
+    write(kSectionHud, L"Right", std::to_wstring(config.hudRect.right));
+    write(kSectionHud, L"Bottom", std::to_wstring(config.hudRect.bottom));
+    const bool flushed = WritePrivateProfileStringW(nullptr, nullptr, nullptr, path.c_str()) != FALSE;
+    return saved && flushed;
 }
 
 bool ConfigService::SaveLastGoodHud(const AppConfig& config) const {
@@ -258,25 +244,32 @@ bool ConfigService::LoadLastGoodHud(AppConfig& config) const {
     return true;
 }
 
-void SetAutoStart(bool enabled) {
+bool SetAutoStart(bool enabled) {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
                       L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
                       KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
-        return;
+        return false;
     }
 
     if (enabled) {
         wchar_t executable[MAX_PATH]{};
-        GetModuleFileNameW(nullptr, executable, MAX_PATH);
+        const DWORD length = GetModuleFileNameW(nullptr, executable, MAX_PATH);
+        if (length == 0 || length >= MAX_PATH) {
+            RegCloseKey(key);
+            return false;
+        }
         const std::wstring command = std::wstring(L"\"") + executable + L"\"";
-        RegSetValueExW(key, L"SysGlance", 0, REG_SZ,
-                       reinterpret_cast<const BYTE*>(command.c_str()),
-                       static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
+        const bool success = RegSetValueExW(key, L"SysGlance", 0, REG_SZ,
+                                            reinterpret_cast<const BYTE*>(command.c_str()),
+                                            static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS;
+        RegCloseKey(key);
+        return success;
     } else {
-        RegDeleteValueW(key, L"SysGlance");
+        const LSTATUS status = RegDeleteValueW(key, L"SysGlance");
+        RegCloseKey(key);
+        return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND;
     }
-    RegCloseKey(key);
 }
 
 }  // namespace sysglance

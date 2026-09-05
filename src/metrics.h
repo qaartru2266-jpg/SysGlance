@@ -40,6 +40,9 @@ public:
     void SetInterval(int intervalMs);
     void SetNetworkSelection(std::uint64_t luid, bool includeVirtualInterfaces);
     void SetGpuSelection(std::uint64_t luid);
+    // Called by the UI after sleep/resume or device topology changes. The next
+    // sample establishes fresh network/GPU state rather than showing stale data.
+    void RequestRecovery();
     std::shared_ptr<const MetricSnapshot> Snapshot() const;
     std::vector<NetworkInterfaceInfo> NetworkInterfaces() const;
     std::vector<GpuAdapterInfo> GpuAdapters() const;
@@ -63,6 +66,8 @@ private:
     std::atomic<bool> includeVirtualNetworkInterfaces_{false};
     std::atomic<std::uint64_t> networkSelectionGeneration_{1};
     std::uint64_t appliedNetworkSelectionGeneration_ = 0;
+    std::atomic<std::uint64_t> recoveryGeneration_{0};
+    std::uint64_t appliedRecoveryGeneration_ = 0;
     std::atomic<std::uint64_t> selectedGpuLuid_{0};
     mutable std::mutex devicesMutex_;
     std::vector<NetworkInterfaceInfo> networkInterfaces_;

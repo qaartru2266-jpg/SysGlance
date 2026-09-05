@@ -19,6 +19,11 @@ int main() {
     assert(ShouldFallbackToAggregateNetwork(2, connectedNetwork));
     assert(!ShouldFallbackToAggregateNetwork(1, {}));
 
+    assert(HasSameNetworkMembers({1, 2}, {2, 1}));
+    assert(!HasSameNetworkMembers({1}, {1, 2}));
+    assert(!HasSameNetworkMembers({1, 2}, {1, 3}));
+    assert(HasSameNetworkMembers({}, {}));
+
     assert(SaturatingDelta(100, 40) == 60);
     assert(SaturatingDelta(40, 100) == 0);
     assert(BytesPerSecond(2000, 1000, 1000) == 1000);

@@ -729,8 +729,14 @@ std::wstring AppUi::TooltipText() const {
     } else {
         text << L" | GPU N/A";
     }
-    text << L" | Down " << FormatRate(latest_->networkDownloadBytesPerSecond)
-         << L"/s, Up " << FormatRate(latest_->networkUploadBytesPerSecond) << L"/s";
+    if (latest_->networkAvailable && latest_->networkReady) {
+        text << L" | Down " << FormatRate(latest_->networkDownloadBytesPerSecond)
+             << L"/s, Up " << FormatRate(latest_->networkUploadBytesPerSecond) << L"/s";
+    } else if (latest_->networkAvailable) {
+        text << L" | Network initializing";
+    } else {
+        text << L" | Network N/A";
+    }
     return text.str();
 }
 
@@ -1282,8 +1288,8 @@ void AppUi::ApplySettingsFromControls() {
     if (preset >= 0) SetHudColorPreset(*settingsDraft_, preset);
     config_ = *settingsDraft_;
     configService_.Normalize(config_);
-    configService_.Save(config_);
-    SetAutoStart(config_.autoStart);
+    const bool configSaved = configService_.Save(config_);
+    const bool autoStartUpdated = SetAutoStart(config_.autoStart);
     metrics_.SetInterval(config_.refreshIntervalMs);
     metrics_.SetNetworkSelection(config_.selectedNetworkLuid,
                                  config_.includeVirtualNetworkInterfaces);
@@ -1292,57 +1298,20 @@ void AppUi::ApplySettingsFromControls() {
     ApplyHudStyle();
     ApplyMode();
     UpdateTrayTooltip();
-    if (CanRenderHud(config_)) configService_.SaveLastGoodHud(config_);
+    if (configSaved && CanRenderHud(config_)) configService_.SaveLastGoodHud(config_);
     settingsDraft_ = config_;
     if (previewWarning_ != nullptr) {
-        SetWindowTextW(previewWarning_, L"设置已应用并保存。右键拖动 HUD；左键不会触发操作。");
+        if (configSaved && autoStartUpdated) {
+            SetWindowTextW(previewWarning_, L"设置已应用并保存。右键拖动 HUD；左键不会触发操作。");
+        } else if (!configSaved && !autoStartUpdated) {
+            SetWindowTextW(previewWarning_, L"设置已应用，但配置未保存且开机自启未更新；重启后可能恢复旧设置。");
+        } else if (!configSaved) {
+            SetWindowTextW(previewWarning_, L"设置已应用，但配置未保存；重启后可能恢复旧设置。");
+        } else {
+            SetWindowTextW(previewWarning_, L"设置已保存，但开机自启未更新。");
+        }
     }
     InvalidateSettingsPreview();
-    return;
-
-    const int mode = static_cast<int>(SendMessageW(modeCombo_, CB_GETCURSEL, 0, 0));
-    config_.displayMode = mode == 1 ? DisplayMode::Taskbar : mode == 2 ? DisplayMode::Hud
-                                                                         : DisplayMode::Tray;
-    const int intervalIndex = static_cast<int>(SendMessageW(intervalCombo_, CB_GETCURSEL, 0, 0));
-    config_.refreshIntervalMs = intervalIndex == 0 ? 500 : intervalIndex == 2 ? 2000 : 1000;
-    config_.showCpu = SendMessageW(cpuCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.showMemory = SendMessageW(memoryCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.memoryShowPercent = SendMessageW(memoryModeCombo_, CB_GETCURSEL, 0, 0) == 1;
-    config_.gpuMemoryShowPercent =
-        SendMessageW(gpuMemoryModeCombo_, CB_GETCURSEL, 0, 0) == 1;
-    config_.showGpu = SendMessageW(gpuCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.showNetwork = SendMessageW(networkCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.showNetworkArrows =
-        SendMessageW(networkArrowsCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.showPercentDecimal =
-        SendMessageW(percentPrecisionCombo_, CB_GETCURSEL, 0, 0) != 1;
-    config_.hudLocked = SendMessageW(lockedCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.hudClickThrough = SendMessageW(clickThroughCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    if (config_.hudClickThrough) {
-        config_.hudLocked = true;
-    }
-    config_.autoStart = SendMessageW(autoStartCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    config_.fontSize = ReadPositiveIntegerInput(fontSizeEdit_, config_.fontSize, 1000);
-    config_.hudBorderThicknessTenths =
-        ReadPositiveTenthsInput(borderThicknessEdit_, config_.hudBorderThicknessTenths);
-    const int colorPresetIndex =
-        static_cast<int>(SendMessageW(colorPresetCombo_, CB_GETCURSEL, 0, 0));
-    if (colorPresetIndex >= 0) {
-        SetHudColorPreset(config_, colorPresetIndex);
-    }
-
-    wchar_t opacityText[16]{};
-    GetWindowTextW(opacityEdit_, opacityText, 16);
-    config_.hudOpacity = std::clamp(_wtoi(opacityText), 30, 100);
-    config_.hudWidthDip = ReadPositiveIntegerInput(hudWidthEdit_, config_.hudWidthDip);
-    config_.hudHeightDip = ReadPositiveIntegerInput(hudHeightEdit_, config_.hudHeightDip);
-    configService_.Save(config_);
-    SetAutoStart(config_.autoStart);
-    metrics_.SetInterval(config_.refreshIntervalMs);
-    CreateTextFormat();
-    ApplyHudStyle();
-    ApplyMode();
-    UpdateTrayTooltip();
 }
 
 void AppUi::EnsureRenderTarget(HWND hwnd) {
@@ -1422,9 +1391,20 @@ LRESULT CALLBACK AppUi::SettingsWindowProc(HWND hwnd, UINT message, WPARAM wPara
 LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_DISPLAYCHANGE:
+            metrics_.RequestRecovery();
+            PositionTaskbarSurface();
+            return 0;
         case WM_SETTINGCHANGE:
             PositionTaskbarSurface();
             return 0;
+        case WM_DEVICECHANGE:
+            metrics_.RequestRecovery();
+            return 0;
+        case WM_POWERBROADCAST:
+            if (wParam == PBT_APMRESUMEAUTOMATIC || wParam == PBT_APMRESUMESUSPEND) {
+                metrics_.RequestRecovery();
+            }
+            return TRUE;
         case kMetricsReadyMessage:
             latest_ = metrics_.Snapshot();
             if (config_.selectedGpuLuid != 0) {

@@ -69,6 +69,17 @@ inline bool ShouldFallbackToAggregateNetwork(
     return selected == interfaces.end() || !selected->connected;
 }
 
+// Aggregate network rates are only meaningful while the same interfaces are
+// present on both sides of a sampling interval. A Wi-Fi/VPN/ethernet change
+// must establish a fresh baseline instead of mixing counter deltas.
+inline bool HasSameNetworkMembers(std::vector<std::uint64_t> previous,
+                                  std::vector<std::uint64_t> current) {
+    if (previous.size() != current.size()) return false;
+    std::sort(previous.begin(), previous.end());
+    std::sort(current.begin(), current.end());
+    return previous == current;
+}
+
 struct GpuAdapterInfo {
     std::uint64_t luid = 0;
     std::wstring name;

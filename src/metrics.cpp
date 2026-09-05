@@ -114,8 +114,21 @@ bool ReadNetwork(MetricService::NetworkState& state, MetricSnapshot& snapshot,
     inventory = std::move(discovered);
     const auto now = GetTickCount64();
     const auto elapsed = SaturatingDelta(now, state.timestamp);
+    std::vector<std::uint64_t> previousMembers;
+    previousMembers.reserve(state.interfaces.size());
+    for (const auto& [interfaceId, _] : state.interfaces) {
+        previousMembers.push_back(interfaceId);
+    }
+    std::vector<std::uint64_t> currentMembers;
+    currentMembers.reserve(current.size());
+    for (const auto& [interfaceId, _] : current) {
+        currentMembers.push_back(interfaceId);
+    }
+    const bool membershipChanged = state.initialized &&
+                                   !HasSameNetworkMembers(previousMembers, currentMembers);
     const bool reset = !state.initialized || selectionGeneration != appliedGeneration ||
-                       elapsed == 0 || elapsed > static_cast<std::uint64_t>(intervalMs) * 3ULL;
+                       membershipChanged || elapsed == 0 ||
+                       elapsed > static_cast<std::uint64_t>(intervalMs) * 3ULL;
     if (!reset && !current.empty()) {
         for (const auto& [interfaceId, counters] : current) {
             const auto previous = state.interfaces.find(interfaceId);
@@ -388,6 +401,11 @@ void MetricService::SetGpuSelection(std::uint64_t luid) {
     wakeCondition_.notify_all();
 }
 
+void MetricService::RequestRecovery() {
+    recoveryGeneration_.fetch_add(1);
+    wakeCondition_.notify_all();
+}
+
 std::shared_ptr<const MetricSnapshot> MetricService::Snapshot() const {
     return snapshot_.load(std::memory_order_acquire);
 }
@@ -424,6 +442,18 @@ void MetricService::Run() {
 
 void MetricService::Sample(MetricSnapshot& snapshot) {
     snapshot.timestampMs = GetTickCount64();
+    const std::uint64_t recoveryGeneration = recoveryGeneration_.load();
+    if (recoveryGeneration != appliedRecoveryGeneration_) {
+        // Rebuild only in the worker: UI messages must not touch performance
+        // APIs. CPU and network restart their baselines, while GPU refreshes
+        // its adapter inventory and PDH query.
+        cpu_.initialized = false;
+        network_ = {};
+        if (gpu_ != nullptr) {
+            gpu_->Initialize();
+        }
+        appliedRecoveryGeneration_ = recoveryGeneration;
+    }
     ReadSystemCpu(cpu_, snapshot.cpuPercent);
     ReadMemory(snapshot);
     std::vector<NetworkInterfaceInfo> interfaces;
