@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SysGlance VERSION 1.0.1 LANGUAGES CXX RC)
+project(SysGlance VERSION 1.0.2 LANGUAGES CXX RC)
 
 include(CTest)
 
@@ -24,6 +24,7 @@ target_compile_definitions(SysGlance PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX
     _WIN32_WINNT=0x0A00
+    SYSGLANCE_VERSION=L\"${PROJECT_VERSION}\"
 )
 
 if (MSVC)

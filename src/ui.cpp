@@ -63,6 +63,7 @@ constexpr int kSettingsContentHeightDip = 1010;
 constexpr int kSettingsWindowMarginDip = 32;
 constexpr DWORD kSettingsComboStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
                                      CBS_DROPDOWNLIST;
+constexpr wchar_t kSettingsVersionText[] = L"SysGlance v" SYSGLANCE_VERSION;
 
 std::wstring Number(double value, int precision = 0) {
     std::wstringstream stream;
@@ -819,6 +820,9 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
         return control;
     };
 
+    // This is deliberately outside the scroll-only content below so screenshots
+    // and support reports can identify the running Release immediately.
+    label(kSettingsVersionText, 24, 0, 150);
     label(L"显示模式", 24, 22, 120);
     modeCombo_ = CreateWindowW(L"COMBOBOX", nullptr, kSettingsComboStyle,
                                180, 18, 340, 120, hwnd,
