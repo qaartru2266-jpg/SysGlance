@@ -1,13 +1,14 @@
 # SysGlance 协作指南
 
-本文件是接手本项目时的工作契约。开始改动前，先阅读 [产品说明](docs/PRODUCT.md) 和 [开发记录](docs/DEVELOPMENT.md)，特别是“已知限制与后续验证”。
+本文件是接手本项目时的工作契约。开始改动前，先阅读 [产品说明](docs/PRODUCT.md) 和 [开发记录](docs/DEVELOPMENT.md)，特别是“已知限制与后续验证”。涉及 macOS 时，还必须先阅读 [macOS 协作指南](macos/AGENTS.md)、[当前产品行为](macos/docs/CURRENT-BEHAVIOR.md) 和 [Windows 对齐记录](macos/docs/WINDOWS-ALIGNMENT.md)。
 
 ## 项目边界
 
-- 这是一个 C++20 / Win32 原生 Windows 工具，保持单进程、低依赖。
-- 不引入 Qt、Electron、WebView、后台服务或 Explorer 注入。
+- SysGlance 是双平台原生工具：Windows 位于根目录，macOS 位于 `macos/`；两端均保持单进程、低依赖。
+- Windows 使用 C++20 / Win32；macOS 使用 Swift / AppKit。两端均不引入 Qt、Electron、WebView、后台服务或系统 UI 注入。
 - 任务栏模式只能是任务栏附近的信息条，不能占用或修改系统任务栏；它是实验功能。
 - 目标平台是 Windows 10 22H2+ 与 Windows 11，x64 优先。
+- macOS 目标为 macOS 13+、Apple Silicon ARM64 优先；GPU 暂保持安全 `N/A`，不接入未经验证的私有 API。
 - 当前产品主体验是 HUD 与托盘；不要为伪任务栏融合牺牲稳定性。
 
 ## 目录职责
@@ -20,6 +21,7 @@
 | `src/ui.*` | 托盘、HUD、实验信息条、设置窗口、Direct2D/DirectWrite 绘制。 |
 | `tests/` | 不依赖 UI 的计算与边界测试。 |
 | `docs/` | 产品口径、开发状态和验证记录。 |
+| `macos/` | 独立的 Swift/AppKit 实现、XCTest、macOS 产品行为与打包脚本；进入该目录后以其 `AGENTS.md` 为准。 |
 | `scripts/build-release.ps1` | 当前开发机的 NMake Release 构建、CTest 和可执行文件复制流程。 |
 | `scripts/package-portable.ps1` | 独立 Release 候选包构建与 zip 打包；不会覆盖 `build\Release`。 |
 | `.github/workflows/release.yml` | 推送 `v*` 标签时的 GitHub Windows 构建、测试、压缩与 Release 流程。 |
@@ -50,7 +52,7 @@
 
 ## 构建与验证
 
-常规构建：
+Windows 常规构建：
 
 ```powershell
 cmake -S . -B build -A x64
@@ -65,6 +67,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
 修改采样、配置或格式化逻辑后，至少运行 CTest。修改 UI 后，额外手工确认：HUD 可显示、仅右键可拖动、左键无操作、设置取消不改变实际 HUD、应用后持久化、重启恢复、锁定/穿透。修改设备和布局后，按开发记录补充网卡切换、GPU 选择、睡眠唤醒、DPI 和多显示器验证。
+
+macOS 修改后，至少在 macOS 13+ 环境运行 `cd macos && swift build`；完整 Xcode 环境还应运行 `swift test` 与 `zsh scripts/package-app.sh`。当前 macOS 交付物未签名，完整行为验证以 `macos/AGENTS.md` 的清单为准。
 
 部署到 `build\Release\SysGlance.exe` 前，先确认正在运行的同路径进程已退出；Windows 会锁定可执行文件。不要把调试构建误当作已部署版本。
 

@@ -1,4 +1,4 @@
-name: Release Windows x64
+name: Release
 
 on:
   push:
@@ -9,12 +9,20 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
+  build-windows:
     # Keep the Visual Studio 2022 generator below stable. windows-latest can
     # advance to a newer image where this generator is no longer available.
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+      - name: Validate version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Release tags must use vX.Y.Z.' }
+          $resourceVersion = ($version -replace '\.', ',') + ',0'
+          if (-not (Select-String -Path CMakeLists.txt -Pattern "project\(SysGlance VERSION $([regex]::Escape($version))" -Quiet)) { throw 'CMake version does not match tag.' }
+          if (-not (Select-String -Path src\sysglance.rc -Pattern "FILEVERSION $([regex]::Escape($resourceVersion))" -Quiet)) { throw 'Windows resource version does not match tag.' }
       - name: Configure
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
       - name: Build
@@ -29,8 +37,73 @@ jobs:
           Copy-Item build\Release\SysGlance.exe release\$name\SysGlance.exe
           Copy-Item packaging\README.txt release\$name\README.txt
           Compress-Archive -Path release\$name -DestinationPath release\$name.zip -CompressionLevel Optimal
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: release/SysGlance-${{ github.ref_name }}-win-x64.zip
+          if-no-files-found: error
+
+  build-macos:
+    # macos-14 is a GitHub-hosted Apple Silicon ARM64 image.
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate ARM64 runner and version
+        run: |
+          test "$(uname -m)" = "arm64"
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Fq "static let version = \"$version\"" Sources/SysGlance/Models.swift
+          grep -Fq "app_version=\"$version\"" scripts/package-app.sh
+      - name: Test
+        run: swift test
+      - name: Package app
+        run: |
+          zsh scripts/package-app.sh
+          version="${GITHUB_REF_NAME#v}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/SysGlance.app/Contents/Info.plist)" = "$version"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist/SysGlance.app/Contents/Info.plist)" = "200"
+      - name: Create macOS ZIP
+        working-directory: .
+        run: |
+          name="SysGlance-${GITHUB_REF_NAME}-macos-arm64"
+          rm -rf "release/$name" "release/$name.zip"
+          mkdir -p "release/$name"
+          ditto macos/dist/SysGlance.app "release/$name/SysGlance.app"
+          cp macos/README.md "release/$name/README.md"
+          ditto -c -k --sequesterRsrc --keepParent "release/$name" "release/$name.zip"
+          unzip -l "release/$name.zip" | grep -Fq "SysGlance.app/Contents/Info.plist"
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: release/SysGlance-${{ github.ref_name }}-macos-arm64.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: release/macos
       - name: Publish GitHub Release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" release\*.zip --generate-notes
+        run: |
+          tag="${{ github.ref_name }}"
+          gh release create "$tag" \
+            "release/windows/SysGlance-${tag}-win-x64.zip" \
+            "release/macos/SysGlance-${tag}-macos-arm64.zip" \
+            --title "SysGlance ${tag}" \
+            --notes-file .github/RELEASE_NOTES.md
