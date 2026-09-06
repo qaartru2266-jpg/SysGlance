@@ -75,10 +75,7 @@ jobs:
           mkdir -p "release/$name"
           ditto macos/dist/SysGlance.app "release/$name/SysGlance.app"
           cp macos/README.md "release/$name/README.md"
-          (
-            cd "release/$name"
-            ditto -c -k --sequesterRsrc --keepParent SysGlance.app README.md "../$name.zip"
-          )
+          ditto -c -k --sequesterRsrc "release/$name" "release/$name.zip"
           unzip -Z1 "release/$name.zip" | grep -Fxq "SysGlance.app/Contents/Info.plist"
           unzip -Z1 "release/$name.zip" | grep -Fxq "README.md"
           if unzip -Z1 "release/$name.zip" | grep -Fq "$name/"; then
