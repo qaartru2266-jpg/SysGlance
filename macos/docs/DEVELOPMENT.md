@@ -6,7 +6,7 @@
 
 ## 统一发布版本
 
-`v2.0.0` 是 SysGlance 的首个统一 Windows 与 macOS Release。它提升 macOS 设置窗口、应用包与 Release 资产的版本号，但不改变这里记录的 Windows `v1.0.3` 行为对齐基线。GitHub Actions 会在 Apple Silicon ARM64 runner 上运行 `swift test`、打包 `SysGlance.app` 并将其作为未签名、未 notarize 的 macOS Release ZIP 发布。
+`v2.0.0` 是 SysGlance 的首个统一 Windows 与 macOS Release。它提升 macOS 设置窗口、应用包与 Release 资产的版本号，但不改变这里记录的 Windows `v1.0.3` 行为对齐基线。SwiftPM manifest 保持 Swift tools 5.10 兼容，以适配当前 GitHub `macos-14` ARM64 runner；GitHub Actions 会运行 `swift test`、打包 `SysGlance.app` 并将其作为未签名、未 notarize 的 macOS Release ZIP 发布。
 
 ## 前置条件
 
