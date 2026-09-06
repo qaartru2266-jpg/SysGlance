@@ -11,6 +11,7 @@
 - macOS AppKit 源码已通过独立 PR 合入主线；它位于 `macos/`，不改动既有 Windows C++、Win32 构建或运行路径。
 - Windows 显示、采样与构建行为保持不变，仅将用户可见程序与资源版本提升为 `2.0.0`。macOS 同步显示 `macOS v2.0.0`；其用户可见行为仍以 Windows `v1.0.3` 为对齐基线。
 - GitHub Release 工作流现在分别构建 Windows x64 与 macOS ARM64，并仅在两端测试和打包均成功后发布两个 ZIP。macOS 产物是未签名、未 notarize 的 `SysGlance.app`，GPU 指标目前明确安全降级为 `N/A`。
+- 发布 job 对同名标签保持幂等：重新验证同一标签时会替换两个 ZIP 与 Release Notes，而不是创建重复 Release。
 - macOS 完整 XCTest 由 GitHub macOS runner 执行；Windows 本机仍需保留 GPU、睡眠唤醒、RDP、多显示器等真实环境验证。
 
 ### 发布前收敛（2026-08-20）
