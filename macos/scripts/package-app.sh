@@ -5,7 +5,7 @@ script_dir=${0:A:h}
 project_dir=${script_dir:h}
 app_dir="$project_dir/dist/SysGlance.app"
 binary_dir="$project_dir/.build/release"
-app_version="1.0.3"
+app_version="2.0.0"
 
 cd "$project_dir"
 swift build -c release
@@ -27,7 +27,7 @@ cat > "$app_dir/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key><string>SysGlance</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${app_version}</string>
-    <key>CFBundleVersion</key><string>103</string>
+    <key>CFBundleVersion</key><string>200</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>

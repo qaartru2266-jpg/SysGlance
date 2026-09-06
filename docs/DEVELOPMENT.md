@@ -6,6 +6,13 @@
 
 当前主体验是 HUD 与托盘。任务栏信息条保留为实验功能，不应继续为“看起来像系统任务栏的一部分”投入实现；它绝不能占据或修改系统任务栏。
 
+### 首个统一双平台 Release v2.0.0（2026-09-06）
+
+- macOS AppKit 源码已通过独立 PR 合入主线；它位于 `macos/`，不改动既有 Windows C++、Win32 构建或运行路径。
+- Windows 显示、采样与构建行为保持不变，仅将用户可见程序与资源版本提升为 `2.0.0`。macOS 同步显示 `macOS v2.0.0`；其用户可见行为仍以 Windows `v1.0.3` 为对齐基线。
+- GitHub Release 工作流现在分别构建 Windows x64 与 macOS ARM64，并仅在两端测试和打包均成功后发布两个 ZIP。macOS 产物是未签名、未 notarize 的 `SysGlance.app`，GPU 指标目前明确安全降级为 `N/A`。
+- macOS 完整 XCTest 由 GitHub macOS runner 执行；Windows 本机仍需保留 GPU、睡眠唤醒、RDP、多显示器等真实环境验证。
+
 ### 发布前收敛（2026-08-20）
 
 - Release 目标静态链接 MSVC 运行库；`dumpbin /DEPENDENTS` 已确认候选程序不再依赖 `MSVCP140.dll`、`VCRUNTIME140.dll` 等可再发行组件。
