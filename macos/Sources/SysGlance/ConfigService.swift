@@ -65,7 +65,9 @@ final class ConfigService {
         c.showNetworkArrows = bool("showNetworkArrows", c.showNetworkArrows)
         c.hudWidth = cg("hudWidth", c.hudWidth); c.hudHeight = cg("hudHeight", c.hudHeight); c.fontSize = cg("fontSize", c.fontSize); c.borderWidth = cg("borderWidth", c.borderWidth)
         c.borderColorHex = value["borderColorHex"] ?? c.borderColorHex; c.textColorHex = value["textColorHex"] ?? c.textColorHex; c.backgroundColorHex = value["backgroundColorHex"] ?? c.backgroundColorHex
-        c.contentOpacity = cg("contentOpacity", c.contentOpacity); c.locked = bool("locked", c.locked); c.mouseThrough = bool("mouseThrough", c.mouseThrough)
+        c.contentOpacity = cg("contentOpacity", c.contentOpacity)
+        c.backgroundOpacity = value["backgroundOpacity"].flatMap(Double.init).map { CGFloat($0) } ?? c.contentOpacity
+        c.locked = bool("locked", c.locked); c.mouseThrough = bool("mouseThrough", c.mouseThrough)
         c.hudX = value["hudX"].flatMap(Double.init).map { CGFloat($0) }; c.hudY = value["hudY"].flatMap(Double.init).map { CGFloat($0) }
         return c
     }
@@ -74,7 +76,7 @@ final class ConfigService {
         let lines: [String?] = [
             "displayMode=\(c.displayMode.rawValue)", "refreshMilliseconds=\(c.refreshMilliseconds)", "showCPU=\(c.showCPU)", "showMemory=\(c.showMemory)", "showGPU=\(c.showGPU)", "showNetwork=\(c.showNetwork)",
             "memoryDisplayMode=\(c.memoryDisplayMode.rawValue)", "percentPrecision=\(c.percentPrecision.rawValue)", "showNetworkArrows=\(c.showNetworkArrows)",
-            "hudWidth=\(c.hudWidth)", "hudHeight=\(c.hudHeight)", "fontSize=\(c.fontSize)", "borderWidth=\(c.borderWidth)", "borderColorHex=\(c.borderColorHex)", "textColorHex=\(c.textColorHex)", "backgroundColorHex=\(c.backgroundColorHex)", "contentOpacity=\(c.contentOpacity)", "locked=\(c.locked)", "mouseThrough=\(c.mouseThrough)",
+            "hudWidth=\(c.hudWidth)", "hudHeight=\(c.hudHeight)", "fontSize=\(c.fontSize)", "borderWidth=\(c.borderWidth)", "borderColorHex=\(c.borderColorHex)", "textColorHex=\(c.textColorHex)", "backgroundColorHex=\(c.backgroundColorHex)", "contentOpacity=\(c.contentOpacity)", "backgroundOpacity=\(c.backgroundOpacity)", "locked=\(c.locked)", "mouseThrough=\(c.mouseThrough)",
             c.hudX.map { "hudX=\($0)" }, c.hudY.map { "hudY=\($0)" }
         ]
         return lines.compactMap { $0 }.joined(separator: "\n") + "\n"
