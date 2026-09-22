@@ -34,6 +34,46 @@ final class SysGlanceTests: XCTestCase {
         XCTAssertTrue(config.locked)
     }
 
+    func testRecommendedConfigurationUsesTransparentBackground() {
+        XCTAssertEqual(AppConfig.recommended.backgroundOpacity, 0)
+    }
+
+    func testConfigurationNormalizesIndependentBackgroundOpacity() {
+        var config = AppConfig.recommended
+        config.backgroundOpacity = 2
+        config.contentOpacity = 0.65
+        config.normalize()
+        XCTAssertEqual(config.backgroundOpacity, 1)
+        XCTAssertEqual(config.contentOpacity, 0.65)
+    }
+
+    func testLegacyConfigUsesContentOpacityForBackgroundOpacity() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let url = directory.appendingPathComponent("config.ini")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "[SysGlance]\ncontentOpacity=0.42\n".write(to: url, atomically: true, encoding: .utf8)
+
+        let loaded = ConfigService(configURL: url).load().config
+        XCTAssertEqual(loaded.contentOpacity, 0.42)
+        XCTAssertEqual(loaded.backgroundOpacity, 0.42)
+    }
+
+    func testConfigRoundTripPreservesIndependentBackgroundOpacity() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let url = directory.appendingPathComponent("config.ini")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let service = ConfigService(configURL: url)
+        var config = AppConfig.recommended
+        config.contentOpacity = 0.8
+        config.backgroundOpacity = 0.25
+        try service.save(config: config, lastGood: config)
+
+        let loaded = service.load().config
+        XCTAssertEqual(loaded.contentOpacity, 0.8)
+        XCTAssertEqual(loaded.backgroundOpacity, 0.25)
+    }
+
     func testHudKeepsNetworkWhenGPUIsUnavailable() {
         var config = AppConfig.recommended
         config.showGPU = true
