@@ -66,7 +66,7 @@ final class ConfigService {
         c.hudWidth = cg("hudWidth", c.hudWidth); c.hudHeight = cg("hudHeight", c.hudHeight); c.fontSize = cg("fontSize", c.fontSize); c.borderWidth = cg("borderWidth", c.borderWidth)
         c.borderColorHex = value["borderColorHex"] ?? c.borderColorHex; c.textColorHex = value["textColorHex"] ?? c.textColorHex; c.backgroundColorHex = value["backgroundColorHex"] ?? c.backgroundColorHex
         c.contentOpacity = cg("contentOpacity", c.contentOpacity)
-        c.backgroundOpacity = value["backgroundOpacity"].flatMap(Double.init).map { CGFloat($0) } ?? c.contentOpacity
+        c.backgroundOpacity = value["backgroundOpacity"].flatMap(Double.init).map { CGFloat($0) } ?? c.backgroundOpacity
         c.locked = bool("locked", c.locked); c.mouseThrough = bool("mouseThrough", c.mouseThrough)
         c.hudX = value["hudX"].flatMap(Double.init).map { CGFloat($0) }; c.hudY = value["hudY"].flatMap(Double.init).map { CGFloat($0) }
         return c

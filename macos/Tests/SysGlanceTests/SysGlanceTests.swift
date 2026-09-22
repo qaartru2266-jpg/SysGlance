@@ -47,7 +47,7 @@ final class SysGlanceTests: XCTestCase {
         XCTAssertEqual(config.contentOpacity, 0.65)
     }
 
-    func testLegacyConfigUsesContentOpacityForBackgroundOpacity() throws {
+    func testLegacyConfigDefaultsToTransparentBackground() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let url = directory.appendingPathComponent("config.ini")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -56,7 +56,7 @@ final class SysGlanceTests: XCTestCase {
 
         let loaded = ConfigService(configURL: url).load().config
         XCTAssertEqual(loaded.contentOpacity, 0.42)
-        XCTAssertEqual(loaded.backgroundOpacity, 0.42)
+        XCTAssertEqual(loaded.backgroundOpacity, 0)
     }
 
     func testConfigRoundTripPreservesIndependentBackgroundOpacity() throws {
