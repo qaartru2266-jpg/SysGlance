@@ -87,6 +87,7 @@ struct AppConfig: Equatable, Sendable {
     var textColorHex = "#F5F5F7"
     var backgroundColorHex = "#1C1C1E"
     var contentOpacity: CGFloat = 0.9
+    var backgroundOpacity: CGFloat = 0
     var locked = false
     var mouseThrough = false
     var hudX: CGFloat?
@@ -101,6 +102,7 @@ struct AppConfig: Equatable, Sendable {
         fontSize = min(max(fontSize, 8), 36)
         borderWidth = min(max(borderWidth, 0), 8)
         contentOpacity = min(max(contentOpacity, 0), 1)
+        backgroundOpacity = min(max(backgroundOpacity, 0), 1)
         if mouseThrough { locked = true }
         borderColorHex = NSColor(hex: borderColorHex).hexString
         textColorHex = NSColor(hex: textColorHex).hexString
