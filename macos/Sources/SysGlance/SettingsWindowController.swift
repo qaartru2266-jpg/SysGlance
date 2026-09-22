@@ -17,7 +17,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let width = NSTextField()
     private let height = NSTextField()
     private let fontSize = NSTextField()
-    private let opacity = NSSlider(value: 0.9, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let contentOpacity = NSSlider(value: 0.9, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let backgroundOpacity = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let borderColor = NSColorWell()
     private let textColor = NSColorWell()
     private let backgroundColor = NSColorWell()
@@ -106,7 +107,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         [mode, refresh, memoryMode, precision].forEach { $0.target = self; $0.action = #selector(changed(_:)) }
         [cpu, memory, gpu, network, arrows, locked, mouseThrough].forEach { $0.target = self; $0.action = #selector(changed(_:)) }
         [width, height, fontSize].forEach { $0.target = self; $0.action = #selector(changed(_:)); $0.widthAnchor.constraint(equalToConstant: 90).isActive = true }
-        opacity.target = self; opacity.action = #selector(changed(_:)); opacity.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        [contentOpacity, backgroundOpacity].forEach {
+            $0.target = self; $0.action = #selector(changed(_:)); $0.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        }
         [borderColor, textColor, backgroundColor].forEach { $0.target = self; $0.action = #selector(changed(_:)) }
 
         stack.addArrangedSubview(label("SysGlance macOS v\(AppMetadata.version)"))
@@ -117,7 +120,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(separator())
         stack.addArrangedSubview(label("HUD 外观"))
         let size = NSStackView(views: [width, NSTextField(labelWithString: "×"), height, NSTextField(labelWithString: "pt")]); size.spacing = 6; row("宽 × 高", size)
-        row("字体大小", fontSize); row("内容透明度", opacity)
+        row("字体大小", fontSize); row("文字与边框透明度", contentOpacity); row("背景透明度", backgroundOpacity)
         row("边框颜色", borderColor); row("文字颜色", textColor); row("背景颜色", backgroundColor)
         let presets = NSPopUpButton(); presets.addItems(withTitles: ["自定义", "橙色深色", "蓝色深夜", "浅色玻璃"]); presets.target = self; presets.action = #selector(applyPreset(_:)); row("颜色预设", presets)
         preview.widthAnchor.constraint(equalToConstant: 500).isActive = true; preview.heightAnchor.constraint(equalToConstant: 52).isActive = true; stack.addArrangedSubview(preview)
@@ -145,7 +148,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         memoryMode.removeAllItems(); memoryMode.addItems(withTitles: ["已用 GiB", "使用率"]); memoryMode.selectItem(at: config.memoryDisplayMode == .usedGiB ? 0 : 1)
         precision.removeAllItems(); precision.addItems(withTitles: ["一位小数", "整数"]); precision.selectItem(at: config.percentPrecision == .oneDecimal ? 0 : 1)
         arrows.state = config.showNetworkArrows ? .on : .off
-        width.stringValue = String(format: "%.0f", config.hudWidth); height.stringValue = String(format: "%.0f", config.hudHeight); fontSize.stringValue = String(format: "%.0f", config.fontSize); opacity.doubleValue = config.contentOpacity
+        width.stringValue = String(format: "%.0f", config.hudWidth); height.stringValue = String(format: "%.0f", config.hudHeight); fontSize.stringValue = String(format: "%.0f", config.fontSize); contentOpacity.doubleValue = config.contentOpacity; backgroundOpacity.doubleValue = config.backgroundOpacity
         borderColor.color = NSColor(hex: config.borderColorHex); textColor.color = NSColor(hex: config.textColorHex); backgroundColor.color = NSColor(hex: config.backgroundColorHex)
         locked.state = config.locked ? .on : .off; mouseThrough.state = config.mouseThrough ? .on : .off
         preview.config = config
@@ -160,7 +163,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         value.percentPrecision = precision.indexOfSelectedItem == 0 ? .oneDecimal : .integer
         value.showNetworkArrows = arrows.state == .on
         value.hudWidth = CGFloat(Double(width.stringValue) ?? value.hudWidth); value.hudHeight = CGFloat(Double(height.stringValue) ?? value.hudHeight); value.fontSize = CGFloat(Double(fontSize.stringValue) ?? value.fontSize)
-        value.contentOpacity = CGFloat(opacity.doubleValue)
+        value.contentOpacity = CGFloat(contentOpacity.doubleValue); value.backgroundOpacity = CGFloat(backgroundOpacity.doubleValue)
         value.borderColorHex = borderColor.color.hexString; value.textColorHex = textColor.color.hexString; value.backgroundColorHex = backgroundColor.color.hexString
         value.locked = locked.state == .on; value.mouseThrough = mouseThrough.state == .on
         return value
@@ -170,16 +173,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 private final class SettingsPreview: NSView {
     var config = AppConfig.recommended { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(hex: config.backgroundColorHex).withAlphaComponent(config.contentOpacity).setFill(); NSBezierPath(rect: bounds).fill()
+        NSColor(hex: config.backgroundColorHex).withAlphaComponent(config.backgroundOpacity).setFill(); NSBezierPath(rect: bounds).fill()
         let path = NSBezierPath(rect: bounds.insetBy(dx: config.borderWidth / 2, dy: config.borderWidth / 2)); path.lineWidth = config.borderWidth
-        NSColor(hex: config.borderColorHex).setStroke(); path.stroke()
+        NSColor(hex: config.borderColorHex).withAlphaComponent(config.contentOpacity).setStroke(); path.stroke()
         let font = NSFont.monospacedSystemFont(ofSize: min(config.fontSize, 14), weight: .regular)
         let sample = MetricSnapshot(
             sampledAt: .now, cpuPercent: 12.4, memoryUsedGiB: 8, memoryPercent: 42,
             gpuUsedGiB: 5.1, gpuPercent: 2.4, downloadBytesPerSecond: 102_400, uploadBytesPerSecond: 0
         )
         let text = MetricFormatter.hudText(snapshot: sample, config: config)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(hex: config.textColorHex)]
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(hex: config.textColorHex).withAlphaComponent(config.contentOpacity)]
         let size = text.size(withAttributes: attributes)
         text.draw(at: NSPoint(x: max(0, (bounds.width - size.width) / 2), y: max(0, (bounds.height - size.height) / 2)), withAttributes: attributes)
     }

@@ -98,7 +98,7 @@ private final class HudView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let rect = bounds.insetBy(dx: config.borderWidth / 2, dy: config.borderWidth / 2)
-        NSColor(hex: config.backgroundColorHex).withAlphaComponent(config.contentOpacity).setFill()
+        NSColor(hex: config.backgroundColorHex).withAlphaComponent(config.backgroundOpacity).setFill()
         NSBezierPath(rect: bounds).fill()
         if config.borderWidth > 0 {
             let path = NSBezierPath(rect: rect)
