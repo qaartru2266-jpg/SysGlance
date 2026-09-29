@@ -112,6 +112,7 @@ AppConfig ConfigService::Load() const {
     config.hudRect.bottom = ReadInt(path, kSectionHud, L"Bottom", 0);
 
     config.autoStart = ReadBool(path, kSectionGeneral, L"AutoStart", false);
+    config.autoRecover = ReadBool(path, kSectionGeneral, L"AutoRecover", false);
     Normalize(config);
     return config;
 }
@@ -171,6 +172,7 @@ bool ConfigService::Save(const AppConfig& config) const {
     write(kSectionGeneral, L"DisplayMode", std::to_wstring(static_cast<int>(config.displayMode)));
     write(kSectionGeneral, L"RefreshIntervalMs", std::to_wstring(config.refreshIntervalMs));
     writeBool(kSectionGeneral, L"AutoStart", config.autoStart);
+    writeBool(kSectionGeneral, L"AutoRecover", config.autoRecover);
     write(kSectionDisplay, L"FontSize", std::to_wstring(config.fontSize));
 
     writeBool(kSectionDisplay, L"ShowCpu", config.showCpu);

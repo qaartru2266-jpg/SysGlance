@@ -51,15 +51,18 @@ constexpr int kIncludeVirtualNetworkCheckId = 227;
 constexpr int kGpuAdapterComboId = 228;
 constexpr int kRecommendedHudButtonId = 229;
 constexpr int kLastGoodHudButtonId = 230;
+constexpr int kAutoRecoverCheckId = 231;
+constexpr int kOpenDiagnosticsButtonId = 232;
 constexpr int kExitMenuId = 300;
 constexpr int kSettingsMenuId = 301;
+constexpr int kDiagnosticsMenuId = 302;
 constexpr int kTrayModeMenuId = 310;
 constexpr int kTaskbarModeMenuId = 311;
 constexpr int kHudModeMenuId = 312;
 constexpr int kTaskbarWidth = 360;
 constexpr int kTaskbarHeight = 30;
 constexpr int kSettingsWidthDip = 570;
-constexpr int kSettingsContentHeightDip = 1010;
+constexpr int kSettingsContentHeightDip = 1032;
 constexpr int kSettingsWindowMarginDip = 32;
 constexpr DWORD kSettingsComboStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
                                      CBS_DROPDOWNLIST;
@@ -132,8 +135,10 @@ int PixelsFromDip(float value, UINT dpi) {
 
 }  // namespace
 
-AppUi::AppUi(HINSTANCE instance, AppConfig config, ConfigService configService)
-    : instance_(instance), configService_(std::move(configService)), config_(config) {}
+AppUi::AppUi(HINSTANCE instance, AppConfig config, ConfigService configService,
+             DiagnosticService& diagnostics, RuntimeDiagnostic startupDiagnostic)
+    : instance_(instance), configService_(std::move(configService)), diagnostics_(diagnostics),
+      config_(config), startupDiagnostic_(std::move(startupDiagnostic)) {}
 
 AppUi::~AppUi() {
     exiting_ = true;
@@ -234,6 +239,10 @@ int AppUi::Run() {
         DispatchMessageW(&message);
     }
     return static_cast<int>(message.wParam);
+}
+
+ExitReason AppUi::ExitReasonOnClose() const {
+    return exitReason_;
 }
 
 bool AppUi::CreateMainWindow() {
@@ -746,6 +755,41 @@ void AppUi::SetDisplayMode(DisplayMode mode) {
     ApplyMode();
 }
 
+std::wstring AppUi::RuntimeStatusText() const {
+    std::wstring text = kSettingsVersionText;
+    text += L"　运行中";
+    if (startupDiagnostic_.recoveredLaunch) {
+        text += L"（本次已自动恢复）";
+    }
+    text += L"　上次：";
+    switch (startupDiagnostic_.lastExitReason) {
+        case ExitReason::Normal:
+            text += L"正常退出";
+            break;
+        case ExitReason::Unclean:
+            text += L"未正常结束";
+            break;
+        case ExitReason::UnhandledException:
+            text += L"已捕获异常";
+            break;
+        case ExitReason::SystemSessionEnd:
+            text += L"Windows 会话结束";
+            break;
+        case ExitReason::InitializationFailed:
+            text += L"初始化失败";
+            break;
+        default:
+            text += L"暂无记录";
+            break;
+    }
+    return text;
+}
+
+void AppUi::OpenDiagnosticLogFolder() const {
+    const std::wstring directory = diagnostics_.DirectoryPath();
+    ShellExecuteW(nullptr, L"open", directory.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 void AppUi::ShowTrayMenu(POINT point) {
     HMENU menu = CreatePopupMenu();
     HMENU modes = CreatePopupMenu();
@@ -759,6 +803,7 @@ void AppUi::ShowTrayMenu(POINT point) {
     AppendMenuW(menu, MF_GRAYED, 0, L"任务栏信息条：实验功能");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kSettingsMenuId, L"设置");
+    AppendMenuW(menu, MF_STRING, kDiagnosticsMenuId, L"打开诊断日志文件夹");
     AppendMenuW(menu, MF_STRING, kExitMenuId, L"退出");
 
     SetForegroundWindow(mainWindow_);
@@ -777,6 +822,9 @@ void AppUi::ShowTrayMenu(POINT point) {
             break;
         case kSettingsMenuId:
             ShowSettings();
+            break;
+        case kDiagnosticsMenuId:
+            OpenDiagnosticLogFolder();
             break;
         case kExitMenuId:
             DestroyWindow(mainWindow_);
@@ -827,8 +875,10 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
     };
 
     // This is deliberately outside the scroll-only content below so screenshots
-    // and support reports can identify the running Release immediately.
-    label(kSettingsVersionText, 24, 0, 150);
+    // and support reports can identify the running Release and lifecycle state.
+    runtimeStatusLabel_ = CreateWindowW(L"STATIC", RuntimeStatusText().c_str(), WS_CHILD | WS_VISIBLE,
+                                        24, 0, 520, 22, hwnd, nullptr, nullptr, nullptr);
+    SetControlFont(runtimeStatusLabel_);
     label(L"显示模式", 24, 22, 120);
     modeCombo_ = CreateWindowW(L"COMBOBOX", nullptr, kSettingsComboStyle,
                                180, 18, 340, 120, hwnd,
@@ -907,108 +957,114 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
     lockedCheck_ = check(L"锁定 HUD", kLockedCheckId, 180, 440, 140);
     clickThroughCheck_ = check(L"鼠标穿透（自动锁定）", kClickThroughCheckId, 330, 440, 180);
     autoStartCheck_ = check(L"开机自动启动", kAutoStartCheckId, 180, 468, 140);
+    autoRecoverCheck_ = check(L"异常退出后自动恢复", kAutoRecoverCheckId, 330, 468, 190);
+    HWND diagnostics = CreateWindowW(L"BUTTON", L"打开诊断日志文件夹", WS_CHILD | WS_VISIBLE,
+                                     180, 492, 160, 26, hwnd,
+                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpenDiagnosticsButtonId)),
+                                     nullptr, nullptr);
+    SetControlFont(diagnostics);
 
-    label(L"HUD 透明度", 24, 508, 120);
+    label(L"HUD 透明度", 24, 530, 120);
     opacityEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-                                 180, 504, 70, 24, hwnd,
+                                 180, 526, 70, 24, hwnd,
                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpacityEditId)),
                                  nullptr, nullptr);
     SetControlFont(opacityEdit_);
-    label(L"30 - 100", 260, 508, 100);
+    label(L"30 - 100", 260, 530, 100);
 
-    label(L"字体大小", 24, 544, 120);
+    label(L"字体大小", 24, 566, 120);
     fontSizeEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-                                  180, 540, 100, 24, hwnd,
+                                  180, 562, 100, 24, hwnd,
                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kFontSizeEditId)),
                                   nullptr, nullptr);
     SetControlFont(fontSizeEdit_);
-    label(L"px", 290, 544, 40);
+    label(L"px", 290, 566, 40);
 
-    label(L"HUD 尺寸", 24, 580, 120);
+    label(L"HUD 尺寸", 24, 602, 120);
     hudWidthEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-                                  180, 576, 80, 24, hwnd,
+                                  180, 598, 80, 24, hwnd,
                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kHudWidthEditId)),
                                   nullptr, nullptr);
     hudHeightEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-                                   300, 576, 80, 24, hwnd,
+                                   300, 598, 80, 24, hwnd,
                                    reinterpret_cast<HMENU>(static_cast<INT_PTR>(kHudHeightEditId)),
                                    nullptr, nullptr);
     SetControlFont(hudWidthEdit_);
     SetControlFont(hudHeightEdit_);
-    label(L"×", 270, 580, 20);
-    label(L"px", 384, 580, 40);
+    label(L"×", 270, 602, 20);
+    label(L"px", 384, 602, 40);
 
-    label(L"外框粗细", 24, 620, 120);
+    label(L"外框粗细", 24, 642, 120);
     borderThicknessEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER,
-                                         180, 616, 100, 24, hwnd,
+                                         180, 638, 100, 24, hwnd,
                                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kBorderThicknessEditId)),
                                          nullptr, nullptr);
     SetControlFont(borderThicknessEdit_);
-    label(L"px（可填小数）", 290, 620, 130);
+    label(L"px（可填小数）", 290, 642, 130);
 
-    label(L"配色预设", 24, 660, 120);
+    label(L"配色预设", 24, 682, 120);
     colorPresetCombo_ = CreateWindowW(
-        L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 656, 220, 120, hwnd,
+        L"COMBOBOX", nullptr, kSettingsComboStyle, 180, 678, 220, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kColorPresetComboId)), nullptr, nullptr);
     SendMessageW(colorPresetCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"夜橙深色（默认）"));
     SendMessageW(colorPresetCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"冰蓝浅色"));
     SendMessageW(colorPresetCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"翡翠深色"));
     SetControlFont(colorPresetCombo_);
 
-    label(L"自定义颜色", 24, 700, 120);
+    label(L"自定义颜色", 24, 722, 120);
     HWND borderColor = CreateWindowW(L"BUTTON", L"外框颜色", WS_CHILD | WS_VISIBLE,
-                                     180, 696, 100, 26, hwnd,
+                                     180, 718, 100, 26, hwnd,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kBorderColorButtonId)),
                                      nullptr, nullptr);
     HWND textColor = CreateWindowW(L"BUTTON", L"文字颜色", WS_CHILD | WS_VISIBLE,
-                                   290, 696, 100, 26, hwnd,
+                                   290, 718, 100, 26, hwnd,
                                    reinterpret_cast<HMENU>(static_cast<INT_PTR>(kTextColorButtonId)),
                                    nullptr, nullptr);
     HWND backgroundColor = CreateWindowW(L"BUTTON", L"背景颜色", WS_CHILD | WS_VISIBLE,
-                                         400, 696, 100, 26, hwnd,
+                                         400, 718, 100, 26, hwnd,
                                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kBackgroundColorButtonId)),
                                          nullptr, nullptr);
     SetControlFont(borderColor);
     SetControlFont(textColor);
     SetControlFont(backgroundColor);
-    label(L"预设会覆盖三种颜色；任意颜色均可单独自定义。", 180, 726, 330);
+    label(L"预设会覆盖三种颜色；任意颜色均可单独自定义。", 180, 748, 330);
 
-    label(L"网络来源", 24, 764, 120);
+    label(L"网络来源", 24, 786, 120);
     networkInterfaceCombo_ = CreateWindowW(L"COMBOBOX", nullptr,
-        kSettingsComboStyle, 180, 760, 330, 160, hwnd,
+        kSettingsComboStyle, 180, 782, 330, 160, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kNetworkInterfaceComboId)), nullptr, nullptr);
     SetControlFont(networkInterfaceCombo_);
     includeVirtualNetworkCheck_ = check(L"包含 VPN / 虚拟接口", kIncludeVirtualNetworkCheckId,
-                                        180, 788, 210);
+                                        180, 810, 210);
 
-    label(L"GPU 来源", 24, 824, 120);
+    label(L"GPU 来源", 24, 846, 120);
     gpuAdapterCombo_ = CreateWindowW(L"COMBOBOX", nullptr,
-        kSettingsComboStyle, 180, 820, 330, 160, hwnd,
+        kSettingsComboStyle, 180, 842, 330, 160, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kGpuAdapterComboId)), nullptr, nullptr);
     SetControlFont(gpuAdapterCombo_);
-    label(L"默认汇总全部设备；GPU 内存可能包含共享内存。", 180, 848, 330);
+    label(L"默认汇总全部设备；GPU 内存可能包含共享内存。", 180, 870, 330);
 
     HWND recommended = CreateWindowW(L"BUTTON", L"恢复推荐 HUD", WS_CHILD | WS_VISIBLE,
-                                     180, 884, 130, 30, hwnd,
+                                     180, 906, 130, 30, hwnd,
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kRecommendedHudButtonId)),
                                      nullptr, nullptr);
     HWND lastGood = CreateWindowW(L"BUTTON", L"恢复上次可用布局", WS_CHILD | WS_VISIBLE,
-                                  320, 884, 150, 30, hwnd,
+                                  320, 906, 150, 30, hwnd,
                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLastGoodHudButtonId)),
                                   nullptr, nullptr);
     SetControlFont(recommended);
     SetControlFont(lastGood);
 
     previewWarning_ = CreateWindowW(L"STATIC", L"提示：右键拖动 HUD；左键不会触发操作。尺寸过小时内容可能裁切。",
-                                    WS_CHILD | WS_VISIBLE, 24, 924, 500, 24, hwnd, nullptr, nullptr, nullptr);
+                                    WS_CHILD | WS_VISIBLE, 24, 946, 500, 24, hwnd, nullptr, nullptr, nullptr);
     SetControlFont(previewWarning_);
 
     HWND apply = CreateWindowW(L"BUTTON", L"应用", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-                               350, 956, 80, 30, hwnd,
+                               350, 978, 80, 30, hwnd,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kApplyButtonId)),
                                nullptr, nullptr);
     HWND close = CreateWindowW(L"BUTTON", L"取消", WS_CHILD | WS_VISIBLE,
-                               440, 956, 80, 30, hwnd,
+                               440, 978, 80, 30, hwnd,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kCloseButtonId)),
                                nullptr, nullptr);
     SetControlFont(apply);
@@ -1216,6 +1272,7 @@ void AppUi::ReadSettingsControls(AppConfig& config) const {
     config.hudLocked = SendMessageW(lockedCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     config.hudClickThrough = SendMessageW(clickThroughCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     config.autoStart = SendMessageW(autoStartCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    config.autoRecover = SendMessageW(autoRecoverCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     config.includeVirtualNetworkInterfaces =
         SendMessageW(includeVirtualNetworkCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     const int network = static_cast<int>(SendMessageW(networkInterfaceCombo_, CB_GETCURSEL, 0, 0));
@@ -1262,6 +1319,8 @@ void AppUi::UpdateSettingsButtonState() {
     SendMessageW(clickThroughCheck_, BM_SETCHECK,
                  draft.hudClickThrough ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(autoStartCheck_, BM_SETCHECK, draft.autoStart ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(autoRecoverCheck_, BM_SETCHECK,
+                 draft.autoRecover ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(includeVirtualNetworkCheck_, BM_SETCHECK, draft.includeVirtualNetworkInterfaces ? BST_CHECKED : BST_UNCHECKED, 0);
     SetWindowTextW(opacityEdit_, std::to_wstring(draft.hudOpacity).c_str());
     SetWindowTextW(hudWidthEdit_, std::to_wstring(draft.hudWidthDip).c_str());
@@ -1290,6 +1349,7 @@ void AppUi::ApplySettingsFromControls() {
     configService_.Normalize(config_);
     const bool configSaved = configService_.Save(config_);
     const bool autoStartUpdated = SetAutoStart(config_.autoStart);
+    const bool autoRecoveryUpdated = ConfigureApplicationRecovery(config_.autoRecover);
     metrics_.SetInterval(config_.refreshIntervalMs);
     metrics_.SetNetworkSelection(config_.selectedNetworkLuid,
                                  config_.includeVirtualNetworkInterfaces);
@@ -1301,14 +1361,12 @@ void AppUi::ApplySettingsFromControls() {
     if (configSaved && CanRenderHud(config_)) configService_.SaveLastGoodHud(config_);
     settingsDraft_ = config_;
     if (previewWarning_ != nullptr) {
-        if (configSaved && autoStartUpdated) {
+        if (configSaved && autoStartUpdated && autoRecoveryUpdated) {
             SetWindowTextW(previewWarning_, L"设置已应用并保存。右键拖动 HUD；左键不会触发操作。");
-        } else if (!configSaved && !autoStartUpdated) {
-            SetWindowTextW(previewWarning_, L"设置已应用，但配置未保存且开机自启未更新；重启后可能恢复旧设置。");
         } else if (!configSaved) {
             SetWindowTextW(previewWarning_, L"设置已应用，但配置未保存；重启后可能恢复旧设置。");
         } else {
-            SetWindowTextW(previewWarning_, L"设置已保存，但开机自启未更新。");
+            SetWindowTextW(previewWarning_, L"设置已保存，但开机自启或异常恢复未更新。可查看诊断日志确认。");
         }
     }
     InvalidateSettingsPreview();
@@ -1443,7 +1501,10 @@ LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
         case WM_QUERYENDSESSION:
             return TRUE;
         case WM_ENDSESSION:
-            if (wParam) PostQuitMessage(0);
+            if (wParam) {
+                exitReason_ = ExitReason::SystemSessionEnd;
+                PostQuitMessage(0);
+            }
             return 0;
         case WM_DESTROY:
             if (!exiting_) {
@@ -1649,6 +1710,9 @@ LRESULT AppUi::HandleSettingsMessage(HWND hwnd, UINT message, WPARAM wParam, LPA
                     return 0;
                 case kLastGoodHudButtonId:
                     ResetSettingsDraft(false);
+                    return 0;
+                case kOpenDiagnosticsButtonId:
+                    OpenDiagnosticLogFolder();
                     return 0;
                 case kBorderColorButtonId:
                     if (!settingsDraft_) settingsDraft_ = config_;

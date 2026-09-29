@@ -8,6 +8,8 @@
 
 `v2.0.0` 是 SysGlance 的首个统一 Windows 与 macOS Release。它提升 macOS 设置窗口、应用包与 Release 资产的版本号，但不改变这里记录的 Windows `v1.0.3` 行为对齐基线。SwiftPM manifest 保持 Swift tools 5.10 兼容，以适配当前 GitHub `macos-14` ARM64 runner；应用入口显式标注 `@MainActor`，使 `AppDelegate` 始终在主 actor 上构造。GitHub Actions 会运行 `swift test`、打包 `SysGlance.app`，并校验 macOS Release ZIP 顶层直接包含应用与 README；该应用未签名、未 notarize。
 
+`v2.0.1` 延续同一对齐基线，并加入 macOS 使用者完成的独立 HUD 背景透明度。背景透明度默认 `0%`；旧配置缺失该字段时会迁移为透明背景，已有 `backgroundOpacity` 设置继续保留。应用包版本为 `2.0.1`，内部构建号为 `201`。
+
 ## 前置条件
 
 - macOS 13+，Apple Silicon 优先。

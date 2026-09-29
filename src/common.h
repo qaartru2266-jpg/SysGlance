@@ -112,6 +112,10 @@ struct AppConfig {
     bool hudClickThrough = false;
     bool hudNetworkOnly = false;
     bool autoStart = false;
+    // Windows Application Restart is opt-in. It asks Windows to relaunch this
+    // same process only after an unexpected termination; normal exit remains
+    // final and does not create a second resident process.
+    bool autoRecover = false;
     int hudOpacity = 90;
     int hudWidthDip = 360;
     int hudHeightDip = 34;

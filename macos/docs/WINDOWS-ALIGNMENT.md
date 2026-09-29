@@ -2,9 +2,14 @@
 
 本文件记录 macOS 对已发布 Windows 版本的对齐状态。只以 GitHub Release tag 为准，不提前实现 Windows 开发中的未发布功能。
 
-## 统一 Release：SysGlance v2.0.0
+## 统一 Release：SysGlance v2.0.1
 
-`v2.0.0` 是首个同时交付 Windows x64 与 macOS ARM64 的统一项目版本。它不代表 macOS 已新增 Windows `v1.0.3` 之后的行为；本目录的当前用户可见行为仍以 Windows `v1.0.3` 为对齐基线。macOS GPU 继续安全降级为 `N/A`，且 Release 应用未签名、未 notarize。
+`v2.0.0` 是首个同时交付 Windows x64 与 macOS ARM64 的统一项目版本；`v2.0.1` 是其维护更新。它们不代表 macOS 已新增 Windows `v1.0.3` 之后的行为；本目录的当前用户可见行为仍以 Windows `v1.0.3` 为对齐基线。macOS GPU 继续安全降级为 `N/A`，且 Release 应用未签名、未 notarize。
+
+| v2.0.1 平台维护变化 | macOS 状态 | 说明 |
+| --- | --- | --- |
+| HUD 背景透明度独立于文字与边框 | 已实现 | 背景默认 `0%`；旧配置安全迁移，已有设置保持。 |
+| Windows 运行诊断与异常恢复 | 平台差异 | 仅 Windows 使用系统 Application Restart；macOS 未新增常驻恢复机制。 |
 
 ## 基线：Windows v1.0.1
 

@@ -9,12 +9,12 @@ SysGlance 是一个供个人使用的原生 Windows 与 macOS 轻量系统监控
 - **Windows x64**：原生 C++20 / Win32，支持 Windows 10 22H2+ 与 Windows 11。
 - **macOS ARM64**：原生 Swift / AppKit，支持 macOS 13+ 与 Apple Silicon。当前 GPU 指标安全显示 `N/A`；应用未签名、未 notarize。
 
-`v2.0.0` 是首个统一双平台 Release。macOS 的当前用户可见行为以 Windows `v1.0.3` 为对齐基线，具体差异见 [macOS Windows 对齐记录](macos/docs/WINDOWS-ALIGNMENT.md)。
+`v2.0.1` 是当前统一双平台 Release。macOS 的当前用户可见行为以 Windows `v1.0.3` 为对齐基线，具体差异见 [macOS Windows 对齐记录](macos/docs/WINDOWS-ALIGNMENT.md)。
 
 ## 当前能力
 
 - 托盘图标、悬停摘要和右键菜单。
-- 可拖动的矩形 HUD：锁定、鼠标穿透、双击切换网络精简模式。
+- 可拖动的矩形 HUD：仅右键可拖动，支持锁定与鼠标穿透；左键和双击不触发操作。
 - CPU、物理内存、GPU 利用率、GPU 内存、网络下载/上传的统一采样。
 - 单独控制每一项是否显示；内存和 GPU 内存可显示实际用量或百分比。
 - 百分比可显示一位小数或整数；网络箭头可隐藏。
@@ -22,13 +22,16 @@ SysGlance 是一个供个人使用的原生 Windows 与 macOS 轻量系统监控
 - 网卡选择（默认汇总所有已连接物理网卡，可选择单卡并包含 VPN/虚拟接口）与 GPU 选择（默认聚合所有适配器）。
 - 设置采用草稿模式：修改仅影响预览；点击“应用”才更新 HUD 并写入配置。
 - 可恢复推荐 HUD，或恢复上一次成功渲染的可用布局。
+- Windows 提供轻量诊断日志、上次退出状态与可选的异常退出自动恢复；不额外常驻守护进程。
+- macOS HUD 支持独立控制背景透明度，以及文字与边框透明度。
 
 ## 使用
 
 双击根目录的 `启动 SysGlance.vbs` 可无窗口启动程序；也可以直接运行 `build\Release\SysGlance.exe`。启动后，右键托盘图标可切换模式或打开设置。
 
 - HUD 未锁定且未开启鼠标穿透时可以拖动。
-- 双击 HUD 会在完整显示与仅网络显示之间切换，并短暂显示切换反馈。
+- HUD 仅能通过右键拖动；左键和双击不触发操作。
+- Windows 的诊断日志位于 `%LOCALAPPDATA%\SysGlance\diagnostics.log`，可在托盘菜单或设置页中打开其所在文件夹。
 - 网络 HUD 的单位是字节每秒，界面省略 `/s`；与任务管理器的 Mbps 对照时，需要按 8 倍换算。
 
 配置文件位于 `%LOCALAPPDATA%\SysGlance\config.ini`。
@@ -58,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 发布包是单个 x64 可执行文件加说明文档，不携带个人配置。构建发布候选包：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-portable.ps1 -Version 2.0.0-preview.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-portable.ps1 -Version 2.0.1-preview.1
 ```
 
 它会在 `dist\` 下生成 `SysGlance-<版本>-win-x64.zip`，且不替换本机正在使用的 `build\Release\SysGlance.exe`。发布版本静态链接 MSVC 运行库；支持的 Windows 10/11 系统只需使用自带的系统 DLL。

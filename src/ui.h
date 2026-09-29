@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "config.h"
+#include "diagnostics.h"
 #include "metrics.h"
 
 #include <d2d1.h>
@@ -15,7 +16,8 @@ namespace sysglance {
 
 class AppUi {
 public:
-    AppUi(HINSTANCE instance, AppConfig config, ConfigService configService);
+    AppUi(HINSTANCE instance, AppConfig config, ConfigService configService,
+          DiagnosticService& diagnostics, RuntimeDiagnostic startupDiagnostic);
     ~AppUi();
 
     AppUi(const AppUi&) = delete;
@@ -23,6 +25,7 @@ public:
 
     bool Initialize();
     int Run();
+    ExitReason ExitReasonOnClose() const;
 
 private:
     static LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT message, WPARAM wParam,
@@ -92,10 +95,14 @@ private:
     std::wstring FormatPercent(double percent, const AppConfig& config) const;
     std::wstring FormatFixedNumber(double value, int width, double maximum) const;
     void UpdateSettingsButtonState();
+    void OpenDiagnosticLogFolder() const;
+    std::wstring RuntimeStatusText() const;
 
     HINSTANCE instance_ = nullptr;
     ConfigService configService_;
+    DiagnosticService& diagnostics_;
     AppConfig config_;
+    RuntimeDiagnostic startupDiagnostic_;
     std::optional<AppConfig> settingsDraft_;
     MetricService metrics_;
     std::shared_ptr<const MetricSnapshot> latest_;
@@ -110,6 +117,7 @@ private:
     HICON trayIconHandle_ = nullptr;
     bool trayCreated_ = false;
     bool exiting_ = false;
+    ExitReason exitReason_ = ExitReason::Normal;
 
     HWND modeCombo_ = nullptr;
     HWND intervalCombo_ = nullptr;
@@ -125,6 +133,8 @@ private:
     HWND lockedCheck_ = nullptr;
     HWND clickThroughCheck_ = nullptr;
     HWND autoStartCheck_ = nullptr;
+    HWND autoRecoverCheck_ = nullptr;
+    HWND runtimeStatusLabel_ = nullptr;
     HWND opacityEdit_ = nullptr;
     HWND hudWidthEdit_ = nullptr;
     HWND hudHeightEdit_ = nullptr;

@@ -2,7 +2,7 @@
 
 原生 AppKit 系统状态 HUD：CPU、内存、GPU（安全降级）和网络速率，以及仅图标的菜单栏入口和展开后的实时摘要。HUD 中的网络单位使用紧凑的 `K` / `M` 标记。
 
-当前发布版本为 `SysGlance v2.0.0`。用户可见行为以 Windows `v1.0.3` 为对齐基线；macOS GPU 采样暂未采用公开稳定方案，因此会安全显示 `N/A`。
+当前发布版本为 `SysGlance v2.0.1`。用户可见行为以 Windows `v1.0.3` 为对齐基线；macOS GPU 采样暂未采用公开稳定方案，因此会安全显示 `N/A`。本版加入 HUD 背景透明度的独立控制，默认背景完全透明，文字和边框透明度不受影响。
 
 当前 HUD 格式、交互和已知限制见 [当前产品行为](docs/CURRENT-BEHAVIOR.md)；与 Windows Release 的对齐状态见 [Windows 对齐记录](docs/WINDOWS-ALIGNMENT.md)；构建、测试和本地发布流程见 [开发文档](docs/DEVELOPMENT.md)。
 

@@ -10,6 +10,7 @@ int main() {
     assert(!defaults.showGpu);
     assert(!defaults.showPercentDecimal);
     assert(!defaults.showNetworkArrows);
+    assert(!defaults.autoRecover);
 
     const std::vector<NetworkInterfaceInfo> connectedNetwork{{1, L"Ethernet", L"", true, true, true}};
     const std::vector<NetworkInterfaceInfo> disconnectedNetwork{{1, L"Ethernet", L"", false, true, false}};

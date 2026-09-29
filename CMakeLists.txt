@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SysGlance VERSION 2.0.0 LANGUAGES CXX RC)
+project(SysGlance VERSION 2.0.1 LANGUAGES CXX RC)
 
 include(CTest)
 
@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(SysGlance WIN32
     src/main.cpp
     src/config.cpp
+    src/diagnostics.cpp
     src/metrics.cpp
     src/ui.cpp
     src/sysglance.rc
