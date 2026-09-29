@@ -116,6 +116,9 @@ struct AppConfig {
     // same process only after an unexpected termination; normal exit remains
     // final and does not create a second resident process.
     bool autoRecover = false;
+    // Background opacity is independent from the existing text/border opacity.
+    // Zero keeps the default HUD background fully transparent.
+    int hudBackgroundOpacity = 0;
     int hudOpacity = 90;
     int hudWidthDip = 360;
     int hudHeightDip = 34;

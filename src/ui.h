@@ -81,7 +81,7 @@ private:
     void UpdateTrayTooltip();
     void ShowTrayMenu(POINT point);
     void SetDisplayMode(DisplayMode mode);
-    void RenderSurface(HWND hwnd, bool hud);
+    void RenderSurface(HWND hwnd);
     void DrawSettingsPreview(const DRAWITEMSTRUCT& draw) const;
     void InvalidateSettingsPreview() const;
     void EnsureRenderTarget(HWND hwnd);
@@ -110,6 +110,7 @@ private:
     HWND mainWindow_ = nullptr;
     HWND taskbarWindow_ = nullptr;
     HWND hudWindow_ = nullptr;
+    HWND hudBackgroundWindow_ = nullptr;
     HWND hudFrameWindow_ = nullptr;
     HWND settingsWindow_ = nullptr;
     HWND settingsPreview_ = nullptr;
@@ -136,6 +137,7 @@ private:
     HWND autoRecoverCheck_ = nullptr;
     HWND runtimeStatusLabel_ = nullptr;
     HWND opacityEdit_ = nullptr;
+    HWND backgroundOpacityEdit_ = nullptr;
     HWND hudWidthEdit_ = nullptr;
     HWND hudHeightEdit_ = nullptr;
     HWND fontSizeEdit_ = nullptr;
@@ -161,6 +163,7 @@ private:
     Microsoft::WRL::ComPtr<IDWriteTextFormat> textFormat_;
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> taskbarRenderTarget_;
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> hudRenderTarget_;
+    Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> hudBackgroundRenderTarget_;
 };
 
 }  // namespace sysglance

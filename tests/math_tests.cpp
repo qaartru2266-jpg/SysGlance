@@ -11,6 +11,7 @@ int main() {
     assert(!defaults.showPercentDecimal);
     assert(!defaults.showNetworkArrows);
     assert(!defaults.autoRecover);
+    assert(defaults.hudBackgroundOpacity == 0);
 
     const std::vector<NetworkInterfaceInfo> connectedNetwork{{1, L"Ethernet", L"", true, true, true}};
     const std::vector<NetworkInterfaceInfo> disconnectedNetwork{{1, L"Ethernet", L"", false, true, false}};

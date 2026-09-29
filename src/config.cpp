@@ -96,6 +96,7 @@ AppConfig ConfigService::Load() const {
     // they can no longer toggle from the UI.
     config.hudNetworkOnly = false;
     config.hudOpacity = ReadInt(path, kSectionHud, L"Opacity", 90);
+    config.hudBackgroundOpacity = ReadInt(path, kSectionHud, L"BackgroundOpacity", 0);
     config.hudWidthDip = ReadInt(path, kSectionHud, L"WidthDip", 360);
     config.hudHeightDip = ReadInt(path, kSectionHud, L"HeightDip", 34);
     config.hudBorderColor = static_cast<COLORREF>(
@@ -125,6 +126,7 @@ void ConfigService::Normalize(AppConfig& config) const {
     if (!IsKnownRefreshInterval(config.refreshIntervalMs)) config.refreshIntervalMs = 1000;
     config.fontSize = std::clamp(config.fontSize, 1, 1000);
     config.hudOpacity = std::clamp(config.hudOpacity, 30, 100);
+    config.hudBackgroundOpacity = std::clamp(config.hudBackgroundOpacity, 0, 100);
     config.hudWidthDip = std::clamp(config.hudWidthDip, 1, 32000);
     config.hudHeightDip = std::clamp(config.hudHeightDip, 1, 32000);
     config.hudBorderThicknessTenths = std::clamp(config.hudBorderThicknessTenths, 1, 1000);
@@ -135,6 +137,7 @@ void ConfigService::Normalize(AppConfig& config) const {
 AppConfig ConfigService::RecommendedHud(const AppConfig& base) const {
     AppConfig result = base;
     result.hudOpacity = 90;
+    result.hudBackgroundOpacity = 0;
     result.hudWidthDip = 360;
     result.hudHeightDip = 34;
     result.fontSize = 12;
@@ -193,6 +196,7 @@ bool ConfigService::Save(const AppConfig& config) const {
     writeBool(kSectionHud, L"NetworkOnly", config.hudNetworkOnly);
     write(kSectionHud, L"LayoutVersion", L"2");
     write(kSectionHud, L"Opacity", std::to_wstring(config.hudOpacity));
+    write(kSectionHud, L"BackgroundOpacity", std::to_wstring(config.hudBackgroundOpacity));
     write(kSectionHud, L"WidthDip", std::to_wstring(config.hudWidthDip));
     write(kSectionHud, L"HeightDip", std::to_wstring(config.hudHeightDip));
     write(kSectionHud, L"BorderColor", std::to_wstring(static_cast<unsigned long>(config.hudBorderColor)));
@@ -220,6 +224,7 @@ bool ConfigService::SaveLastGoodHud(const AppConfig& config) const {
     write(L"Valid", 1); write(L"Left", config.hudRect.left); write(L"Top", config.hudRect.top);
     write(L"WidthDip", config.hudWidthDip); write(L"HeightDip", config.hudHeightDip);
     write(L"FontSize", config.fontSize); write(L"Opacity", config.hudOpacity);
+    write(L"BackgroundOpacity", config.hudBackgroundOpacity);
     write(L"BorderThicknessTenths", config.hudBorderThicknessTenths);
     write(L"BorderColor", static_cast<int>(config.hudBorderColor));
     write(L"TextColor", static_cast<int>(config.hudTextColor));
@@ -237,6 +242,8 @@ bool ConfigService::LoadLastGoodHud(AppConfig& config) const {
     config.hudHeightDip = ReadInt(path, kSectionHudLastGood, L"HeightDip", config.hudHeightDip);
     config.fontSize = ReadInt(path, kSectionHudLastGood, L"FontSize", config.fontSize);
     config.hudOpacity = ReadInt(path, kSectionHudLastGood, L"Opacity", config.hudOpacity);
+    config.hudBackgroundOpacity = ReadInt(path, kSectionHudLastGood, L"BackgroundOpacity",
+                                          config.hudBackgroundOpacity);
     config.hudBorderThicknessTenths = ReadInt(path, kSectionHudLastGood, L"BorderThicknessTenths", config.hudBorderThicknessTenths);
     config.hudBorderColor = static_cast<COLORREF>(ReadInt(path, kSectionHudLastGood, L"BorderColor", config.hudBorderColor));
     config.hudTextColor = static_cast<COLORREF>(ReadInt(path, kSectionHudLastGood, L"TextColor", config.hudTextColor));

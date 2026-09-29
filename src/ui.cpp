@@ -53,6 +53,7 @@ constexpr int kRecommendedHudButtonId = 229;
 constexpr int kLastGoodHudButtonId = 230;
 constexpr int kAutoRecoverCheckId = 231;
 constexpr int kOpenDiagnosticsButtonId = 232;
+constexpr int kBackgroundOpacityEditId = 233;
 constexpr int kExitMenuId = 300;
 constexpr int kSettingsMenuId = 301;
 constexpr int kDiagnosticsMenuId = 302;
@@ -67,6 +68,7 @@ constexpr int kSettingsWindowMarginDip = 32;
 constexpr DWORD kSettingsComboStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
                                      CBS_DROPDOWNLIST;
 constexpr wchar_t kSettingsVersionText[] = L"SysGlance v" SYSGLANCE_VERSION;
+constexpr COLORREF kHudTransparentColor = RGB(1, 2, 3);
 
 std::wstring Number(double value, int precision = 0) {
     std::wstringstream stream;
@@ -105,6 +107,16 @@ D2D1_COLOR_F ToD2DColor(COLORREF color, float alpha) {
     return D2D1::ColorF(static_cast<float>(GetRValue(color)) / 255.0f,
                          static_cast<float>(GetGValue(color)) / 255.0f,
                          static_cast<float>(GetBValue(color)) / 255.0f, alpha);
+}
+
+COLORREF BlendColor(COLORREF foreground, COLORREF background, int opacityPercent) {
+    const int alpha = std::clamp(opacityPercent, 0, 100);
+    const auto blend = [alpha](int foregroundChannel, int backgroundChannel) {
+        return (foregroundChannel * alpha + backgroundChannel * (100 - alpha) + 50) / 100;
+    };
+    return RGB(blend(GetRValue(foreground), GetRValue(background)),
+               blend(GetGValue(foreground), GetGValue(background)),
+               blend(GetBValue(foreground), GetBValue(background)));
 }
 
 void PresetColors(int preset, COLORREF& background, COLORREF& text, COLORREF& border) {
@@ -293,8 +305,12 @@ void AppUi::CreateSurfaces() {
                      reinterpret_cast<LPARAM>(trayIconHandle_));
     }
     hudFrameWindow_ = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, kSurfaceClass, L"SysGlance HUD Frame",
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED, kSurfaceClass,
+        L"SysGlance HUD Frame",
         WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_, this);
+    hudBackgroundWindow_ = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED, kSurfaceClass,
+        L"SysGlance HUD Background", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_, this);
     hudWindow_ = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED, kSurfaceClass,
         L"SysGlance HUD", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_,
@@ -311,22 +327,29 @@ void AppUi::DestroySurfaces() {
         DestroyWindow(hudWindow_);
         hudWindow_ = nullptr;
     }
+    if (hudBackgroundWindow_ != nullptr) {
+        DestroyWindow(hudBackgroundWindow_);
+        hudBackgroundWindow_ = nullptr;
+    }
     if (hudFrameWindow_ != nullptr) {
         DestroyWindow(hudFrameWindow_);
         hudFrameWindow_ = nullptr;
     }
     taskbarRenderTarget_.Reset();
     hudRenderTarget_.Reset();
+    hudBackgroundRenderTarget_.Reset();
 }
 
 void AppUi::ApplyMode() {
-    if (taskbarWindow_ == nullptr || hudWindow_ == nullptr || hudFrameWindow_ == nullptr) {
+    if (taskbarWindow_ == nullptr || hudWindow_ == nullptr || hudBackgroundWindow_ == nullptr ||
+        hudFrameWindow_ == nullptr) {
         return;
     }
     const bool taskbarMode = config_.displayMode == DisplayMode::Taskbar;
     ShowWindow(taskbarWindow_, taskbarMode ? SW_SHOWNOACTIVATE : SW_HIDE);
     if (taskbarMode) PositionTaskbarSurface();
     const int hudVisibility = config_.displayMode == DisplayMode::Hud ? SW_SHOWNOACTIVATE : SW_HIDE;
+    ShowWindow(hudBackgroundWindow_, hudVisibility);
     ShowWindow(hudWindow_, hudVisibility);
     ShowWindow(hudFrameWindow_, hudVisibility);
     if (config_.displayMode == DisplayMode::Hud) {
@@ -334,16 +357,23 @@ void AppUi::ApplyMode() {
     }
     InvalidateRect(taskbarWindow_, nullptr, FALSE);
     InvalidateRect(hudWindow_, nullptr, FALSE);
+    InvalidateRect(hudBackgroundWindow_, nullptr, FALSE);
     InvalidateRect(hudFrameWindow_, nullptr, FALSE);
 }
 
 void AppUi::ApplyHudStyle() {
-    if (hudWindow_ == nullptr) {
+    if (hudWindow_ == nullptr || hudBackgroundWindow_ == nullptr || hudFrameWindow_ == nullptr) {
         return;
     }
-    SetLayeredWindowAttributes(hudWindow_, 0, static_cast<BYTE>(config_.hudOpacity), LWA_ALPHA);
+    const BYTE contentAlpha = static_cast<BYTE>(MulDiv(config_.hudOpacity, 255, 100));
+    const BYTE backgroundAlpha = static_cast<BYTE>(MulDiv(config_.hudBackgroundOpacity, 255, 100));
+    SetLayeredWindowAttributes(hudWindow_, kHudTransparentColor, contentAlpha,
+                               LWA_ALPHA | LWA_COLORKEY);
+    SetLayeredWindowAttributes(hudFrameWindow_, 0, contentAlpha, LWA_ALPHA);
+    SetLayeredWindowAttributes(hudBackgroundWindow_, 0, backgroundAlpha, LWA_ALPHA);
     PositionHudSurface();
     InvalidateRect(hudWindow_, nullptr, FALSE);
+    InvalidateRect(hudBackgroundWindow_, nullptr, FALSE);
     InvalidateRect(hudFrameWindow_, nullptr, FALSE);
 }
 
@@ -430,7 +460,7 @@ bool AppUi::CanRenderHud(const AppConfig& config) const {
 }
 
 void AppUi::PositionHudSurface() {
-    if (hudWindow_ == nullptr || hudFrameWindow_ == nullptr) {
+    if (hudWindow_ == nullptr || hudBackgroundWindow_ == nullptr || hudFrameWindow_ == nullptr) {
         return;
     }
     const auto layout = CalculateHudLayout(config_, true);
@@ -441,6 +471,9 @@ void AppUi::PositionHudSurface() {
         current.right == layout.frame.right && current.bottom == layout.frame.bottom) {
         return;
     }
+    SetWindowPos(hudBackgroundWindow_, HWND_TOPMOST, layout.content.left, layout.content.top,
+                 layout.content.right - layout.content.left, layout.content.bottom - layout.content.top,
+                 SWP_NOACTIVATE);
     SetWindowPos(hudWindow_, HWND_TOPMOST, layout.content.left, layout.content.top,
                  layout.content.right - layout.content.left, layout.content.bottom - layout.content.top,
                  SWP_NOACTIVATE);
@@ -534,6 +567,11 @@ void AppUi::DrawSettingsPreview(const DRAWITEMSTRUCT& draw) const {
     if (borderThicknessEdit_ != nullptr) {
         thicknessTenths = ReadPositiveTenthsInput(borderThicknessEdit_, thicknessTenths);
     }
+
+    const COLORREF previewCanvas = GetSysColor(COLOR_WINDOW);
+    background = BlendColor(background, previewCanvas, preview.hudBackgroundOpacity);
+    border = BlendColor(border, previewCanvas, preview.hudOpacity);
+    text = BlendColor(text, previewCanvas, preview.hudOpacity);
 
     HBRUSH backgroundBrush = CreateSolidBrush(background);
     FillRect(draw.hDC, &draw.rcItem, backgroundBrush);
@@ -964,13 +1002,18 @@ void AppUi::BuildSettingsControls(HWND hwnd) {
                                      nullptr, nullptr);
     SetControlFont(diagnostics);
 
-    label(L"HUD 透明度", 24, 530, 120);
+    label(L"文字/边框透明度", 24, 530, 150);
     opacityEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
                                  180, 526, 70, 24, hwnd,
                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kOpacityEditId)),
                                  nullptr, nullptr);
     SetControlFont(opacityEdit_);
-    label(L"30 - 100", 260, 530, 100);
+    label(L"背景透明度", 270, 530, 130);
+    backgroundOpacityEdit_ = CreateWindowW(
+        L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER, 405, 526, 65, 24, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kBackgroundOpacityEditId)), nullptr, nullptr);
+    SetControlFont(backgroundOpacityEdit_);
+    label(L"%", 478, 530, 24);
 
     label(L"字体大小", 24, 566, 120);
     fontSizeEdit_ = CreateWindowW(L"EDIT", nullptr, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
@@ -1286,6 +1329,9 @@ void AppUi::ReadSettingsControls(AppConfig& config) const {
     wchar_t opacity[16]{};
     GetWindowTextW(opacityEdit_, opacity, _countof(opacity));
     config.hudOpacity = std::clamp(_wtoi(opacity), 30, 100);
+    wchar_t backgroundOpacity[16]{};
+    GetWindowTextW(backgroundOpacityEdit_, backgroundOpacity, _countof(backgroundOpacity));
+    config.hudBackgroundOpacity = std::clamp(_wtoi(backgroundOpacity), 0, 100);
     config.hudWidthDip = ReadPositiveIntegerInput(hudWidthEdit_, config.hudWidthDip);
     config.hudHeightDip = ReadPositiveIntegerInput(hudHeightEdit_, config.hudHeightDip);
     if (config.hudClickThrough) config.hudLocked = true;
@@ -1323,6 +1369,7 @@ void AppUi::UpdateSettingsButtonState() {
                  draft.autoRecover ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(includeVirtualNetworkCheck_, BM_SETCHECK, draft.includeVirtualNetworkInterfaces ? BST_CHECKED : BST_UNCHECKED, 0);
     SetWindowTextW(opacityEdit_, std::to_wstring(draft.hudOpacity).c_str());
+    SetWindowTextW(backgroundOpacityEdit_, std::to_wstring(draft.hudBackgroundOpacity).c_str());
     SetWindowTextW(hudWidthEdit_, std::to_wstring(draft.hudWidthDip).c_str());
     SetWindowTextW(hudHeightEdit_, std::to_wstring(draft.hudHeightDip).c_str());
     SetWindowTextW(fontSizeEdit_, std::to_wstring(draft.fontSize).c_str());
@@ -1373,8 +1420,9 @@ void AppUi::ApplySettingsFromControls() {
 }
 
 void AppUi::EnsureRenderTarget(HWND hwnd) {
-    Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget>* target =
-        hwnd == taskbarWindow_ ? &taskbarRenderTarget_ : &hudRenderTarget_;
+    Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget>* target = hwnd == taskbarWindow_
+        ? &taskbarRenderTarget_
+        : hwnd == hudBackgroundWindow_ ? &hudBackgroundRenderTarget_ : &hudRenderTarget_;
     if (*target || !d2dFactory_) return;
     RECT rect{};
     GetClientRect(hwnd, &rect);
@@ -1388,14 +1436,27 @@ void AppUi::EnsureRenderTarget(HWND hwnd) {
         target->GetAddressOf());
 }
 
-void AppUi::RenderSurface(HWND hwnd, bool hud) {
+void AppUi::RenderSurface(HWND hwnd) {
     if (hwnd == nullptr || latest_ == nullptr) return;
     EnsureRenderTarget(hwnd);
-    auto* target = hwnd == taskbarWindow_ ? taskbarRenderTarget_.Get() : hudRenderTarget_.Get();
+    const bool taskbar = hwnd == taskbarWindow_;
+    const bool hudBackground = hwnd == hudBackgroundWindow_;
+    auto* target = taskbar ? taskbarRenderTarget_.Get()
+                           : hudBackground ? hudBackgroundRenderTarget_.Get()
+                                           : hudRenderTarget_.Get();
     if (target == nullptr || !textFormat_) return;
 
+    if (hudBackground) {
+        target->BeginDraw();
+        target->Clear(ToD2DColor(config_.hudBackgroundColor, 1.0f));
+        const HRESULT result = target->EndDraw();
+        if (result == D2DERR_RECREATE_TARGET) hudBackgroundRenderTarget_.Reset();
+        return;
+    }
+
     const D2D1_SIZE_F size = target->GetSize();
-    const auto background = ToD2DColor(config_.hudBackgroundColor, hud ? 0.90f : 0.96f);
+    const auto background = taskbar ? ToD2DColor(config_.hudBackgroundColor, 0.96f)
+                                    : ToD2DColor(kHudTransparentColor, 1.0f);
     const auto foreground = ToD2DColor(config_.hudTextColor, 1.0f);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     target->CreateSolidColorBrush(foreground, brush.GetAddressOf());
@@ -1409,7 +1470,7 @@ void AppUi::RenderSurface(HWND hwnd, bool hud) {
                       brush.Get());
     const HRESULT result = target->EndDraw();
     if (result == D2DERR_RECREATE_TARGET) {
-        if (hud) hudRenderTarget_.Reset(); else taskbarRenderTarget_.Reset();
+        if (taskbar) taskbarRenderTarget_.Reset(); else hudRenderTarget_.Reset();
     }
 }
 
@@ -1487,6 +1548,7 @@ LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
             UpdateTrayTooltip();
             InvalidateRect(taskbarWindow_, nullptr, FALSE);
             InvalidateRect(hudWindow_, nullptr, FALSE);
+            InvalidateRect(hudBackgroundWindow_, nullptr, FALSE);
             InvalidateRect(hudFrameWindow_, nullptr, FALSE);
             return 0;
         case kTrayMessage:
@@ -1519,8 +1581,9 @@ LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 
 LRESULT AppUi::HandleSurfaceMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     const bool hudContent = hwnd == hudWindow_;
+    const bool hudBackground = hwnd == hudBackgroundWindow_;
     const bool hudFrame = hwnd == hudFrameWindow_;
-    const bool hud = hudContent || hudFrame;
+    const bool hud = hudContent || hudBackground || hudFrame;
     switch (message) {
         case WM_PAINT:
             if (hudFrame) {
@@ -1530,7 +1593,7 @@ LRESULT AppUi::HandleSurfaceMessage(HWND hwnd, UINT message, WPARAM wParam, LPAR
             {
             PAINTSTRUCT paint{};
             BeginPaint(hwnd, &paint);
-            RenderSurface(hwnd, hudContent);
+            RenderSurface(hwnd);
             EndPaint(hwnd, &paint);
             return 0;
             }
