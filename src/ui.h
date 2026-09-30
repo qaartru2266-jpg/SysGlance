@@ -8,6 +8,7 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <shellapi.h>
+#include <wincodec.h>
 #include <wrl/client.h>
 
 #include <optional>
@@ -61,6 +62,7 @@ private:
     void SaveHudPlacement();
     void UpdateHudFrameRegion(int width, int height, int borderThickness);
     void RenderHudFrame(HWND hwnd);
+    void RenderHudTextLayer();
     void ChooseHudColor(HWND owner, COLORREF& color);
     void SetHudColorPreset(AppConfig& config, int preset);
     void MoveHudTo(int left, int top);
@@ -160,6 +162,7 @@ private:
 
     Microsoft::WRL::ComPtr<ID2D1Factory> d2dFactory_;
     Microsoft::WRL::ComPtr<IDWriteFactory> writeFactory_;
+    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory_;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> textFormat_;
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> taskbarRenderTarget_;
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> hudRenderTarget_;

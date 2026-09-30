@@ -43,6 +43,7 @@ target_link_libraries(SysGlance PRIVATE
     dwrite
     dxgi
     iphlpapi
+    ole32
     pdh
     shell32
     shcore

@@ -68,8 +68,6 @@ constexpr int kSettingsWindowMarginDip = 32;
 constexpr DWORD kSettingsComboStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
                                      CBS_DROPDOWNLIST;
 constexpr wchar_t kSettingsVersionText[] = L"SysGlance v" SYSGLANCE_VERSION;
-constexpr COLORREF kHudTransparentColor = RGB(1, 2, 3);
-
 std::wstring Number(double value, int precision = 0) {
     std::wstringstream stream;
     stream << std::fixed << std::setprecision(precision) << value;
@@ -208,10 +206,14 @@ bool AppUi::Initialize() {
         return false;
     }
 
-    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory),
-                      reinterpret_cast<void**>(d2dFactory_.GetAddressOf()));
-    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-                        reinterpret_cast<IUnknown**>(writeFactory_.GetAddressOf()));
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory),
+                                 reinterpret_cast<void**>(d2dFactory_.GetAddressOf()))) ||
+        FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                                   reinterpret_cast<IUnknown**>(writeFactory_.GetAddressOf()))) ||
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(wicFactory_.GetAddressOf())))) {
+        return false;
+    }
     CreateTextFormat();
 
     CreateTrayIcon();
@@ -367,8 +369,6 @@ void AppUi::ApplyHudStyle() {
     }
     const BYTE contentAlpha = static_cast<BYTE>(MulDiv(config_.hudOpacity, 255, 100));
     const BYTE backgroundAlpha = static_cast<BYTE>(MulDiv(config_.hudBackgroundOpacity, 255, 100));
-    SetLayeredWindowAttributes(hudWindow_, kHudTransparentColor, contentAlpha,
-                               LWA_ALPHA | LWA_COLORKEY);
     SetLayeredWindowAttributes(hudFrameWindow_, 0, contentAlpha, LWA_ALPHA);
     SetLayeredWindowAttributes(hudBackgroundWindow_, 0, backgroundAlpha, LWA_ALPHA);
     PositionHudSurface();
@@ -522,6 +522,70 @@ void AppUi::RenderHudFrame(HWND hwnd) {
     FillRect(dc, &paint.rcPaint, brush);
     DeleteObject(brush);
     EndPaint(hwnd, &paint);
+}
+
+void AppUi::RenderHudTextLayer() {
+    if (hudWindow_ == nullptr || latest_ == nullptr || !d2dFactory_ || !wicFactory_ || !textFormat_) {
+        return;
+    }
+
+    RECT rect{};
+    GetClientRect(hudWindow_, &rect);
+    const int width = std::max(1L, rect.right - rect.left);
+    const int height = std::max(1L, rect.bottom - rect.top);
+
+    Microsoft::WRL::ComPtr<IWICBitmap> wicBitmap;
+    Microsoft::WRL::ComPtr<ID2D1RenderTarget> target;
+    const UINT dpi = GetDpiForWindow(hudWindow_);
+    const HRESULT createBitmap = wicFactory_->CreateBitmap(
+        static_cast<UINT>(width), static_cast<UINT>(height), GUID_WICPixelFormat32bppPBGRA,
+        WICBitmapCacheOnLoad, wicBitmap.GetAddressOf());
+    const HRESULT createTarget = SUCCEEDED(createBitmap)
+        ? d2dFactory_->CreateWicBitmapRenderTarget(
+              wicBitmap.Get(), D2D1::RenderTargetProperties(
+                  D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                  D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                  static_cast<FLOAT>(dpi), static_cast<FLOAT>(dpi),
+                  D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE), target.GetAddressOf())
+        : createBitmap;
+
+    if (SUCCEEDED(createTarget) && target != nullptr) {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        target->BeginDraw();
+        target->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+        target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        target->CreateSolidColorBrush(
+            ToD2DColor(config_.hudTextColor, static_cast<float>(config_.hudOpacity) / 100.0f),
+            brush.GetAddressOf());
+        if (brush != nullptr) {
+            const auto size = target->GetSize();
+            constexpr float kHorizontalPadding = 8.0f;
+            const auto bounds = D2D1::RectF(kHorizontalPadding, 0.0f,
+                                            size.width - kHorizontalPadding, size.height);
+            const auto text = MetricsText(config_);
+            target->DrawTextW(text.c_str(), static_cast<UINT32>(text.size()), textFormat_.Get(), bounds,
+                              brush.Get());
+        }
+        Microsoft::WRL::ComPtr<ID2D1GdiInteropRenderTarget> interopTarget;
+        HDC sourceDc = nullptr;
+        if (SUCCEEDED(target.As(&interopTarget)) && interopTarget != nullptr &&
+            SUCCEEDED(interopTarget->GetDC(D2D1_DC_INITIALIZE_MODE_COPY, &sourceDc))) {
+            HDC screenDc = GetDC(nullptr);
+            POINT destination{0, 0};
+            ClientToScreen(hudWindow_, &destination);
+            SIZE size{width, height};
+            POINT source{0, 0};
+            BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+            if (screenDc != nullptr) {
+                UpdateLayeredWindow(hudWindow_, screenDc, &destination, &size, sourceDc, &source,
+                                    0, &blend, ULW_ALPHA);
+                ReleaseDC(nullptr, screenDc);
+            }
+            RECT updated{0, 0, width, height};
+            interopTarget->ReleaseDC(&updated);
+        }
+        target->EndDraw();
+    }
 }
 
 void AppUi::ChooseHudColor(HWND owner, COLORREF& color) {
@@ -1438,6 +1502,10 @@ void AppUi::EnsureRenderTarget(HWND hwnd) {
 
 void AppUi::RenderSurface(HWND hwnd) {
     if (hwnd == nullptr || latest_ == nullptr) return;
+    if (hwnd == hudWindow_) {
+        RenderHudTextLayer();
+        return;
+    }
     EnsureRenderTarget(hwnd);
     const bool taskbar = hwnd == taskbarWindow_;
     const bool hudBackground = hwnd == hudBackgroundWindow_;
@@ -1455,8 +1523,7 @@ void AppUi::RenderSurface(HWND hwnd) {
     }
 
     const D2D1_SIZE_F size = target->GetSize();
-    const auto background = taskbar ? ToD2DColor(config_.hudBackgroundColor, 0.96f)
-                                    : ToD2DColor(kHudTransparentColor, 1.0f);
+    const auto background = ToD2DColor(config_.hudBackgroundColor, 0.96f);
     const auto foreground = ToD2DColor(config_.hudTextColor, 1.0f);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     target->CreateSolidColorBrush(foreground, brush.GetAddressOf());
