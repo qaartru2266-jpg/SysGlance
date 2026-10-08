@@ -1,5 +1,11 @@
 # SysGlance 开发记录
 
+### v2.0.2 透明文字修复发布（2026-10-08）
+
+- 纳入提交 `07498dc`：Windows HUD 使用 WIC/GDI 兼容 DC 与逐像素透明合成，解决白底黑点、字体锯齿和文字消失。本机效果已由使用者确认。
+- 两个平台统一版本为 2.0.2，macOS 构建号为 202；macOS 功能延续 v2.0.1。
+- 发布流程仍要求 Windows CTest 与 macOS XCTest、ARM64 打包校验通过后才公开两个 ZIP。
+
 ## 当前状态（2026-08-12）
 
 本轮已完成“稳定性与体验收敛”实现，实际发布目标为 `build\Release\SysGlance.exe`。最近一次构建通过，`SysGlanceMathTests` 已通过 CTest。

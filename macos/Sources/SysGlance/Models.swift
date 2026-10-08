@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 enum AppMetadata {
-    static let version = "2.0.1"
+    static let version = "2.0.2"
 }
 
 enum DisplayMode: String, CaseIterable, Sendable {

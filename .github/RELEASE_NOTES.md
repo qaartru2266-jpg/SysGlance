@@ -1,11 +1,11 @@
-# SysGlance v2.0.1
+# SysGlance v2.0.2
 
 统一 Windows 与 macOS 的维护更新。
 
 ## 下载
 
-- `SysGlance-v2.0.1-win-x64.zip`：Windows 10 22H2+ 与 Windows 11 的 x64 便携版。
-- `SysGlance-v2.0.1-macos-arm64.zip`：macOS 13+ Apple Silicon 的 ARM64 版本，包含 `SysGlance.app`。
+- `SysGlance-v2.0.2-win-x64.zip`：Windows 10 22H2+ 与 Windows 11 的 x64 便携版。
+- `SysGlance-v2.0.2-macos-arm64.zip`：macOS 13+ Apple Silicon 的 ARM64 版本，包含 `SysGlance.app`。
 
 ## 本次更新
 

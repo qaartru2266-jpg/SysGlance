@@ -9,7 +9,7 @@ SysGlance 是一个供个人使用的原生 Windows 与 macOS 轻量系统监控
 - **Windows x64**：原生 C++20 / Win32，支持 Windows 10 22H2+ 与 Windows 11。
 - **macOS ARM64**：原生 Swift / AppKit，支持 macOS 13+ 与 Apple Silicon。当前 GPU 指标安全显示 `N/A`；应用未签名、未 notarize。
 
-`v2.0.1` 是当前统一双平台 Release。macOS 的当前用户可见行为以 Windows `v1.0.3` 为对齐基线，具体差异见 [macOS Windows 对齐记录](macos/docs/WINDOWS-ALIGNMENT.md)。
+`v2.0.2` 是当前统一双平台 Release。macOS 的当前用户可见行为以 Windows `v1.0.3` 为对齐基线，具体差异见 [macOS Windows 对齐记录](macos/docs/WINDOWS-ALIGNMENT.md)。
 
 ## 当前能力
 
@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 发布包是单个 x64 可执行文件加说明文档，不携带个人配置。构建发布候选包：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-portable.ps1 -Version 2.0.1-preview.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-portable.ps1 -Version 2.0.2-preview.1
 ```
 
 它会在 `dist\` 下生成 `SysGlance-<版本>-win-x64.zip`，且不替换本机正在使用的 `build\Release\SysGlance.exe`。发布版本静态链接 MSVC 运行库；支持的 Windows 10/11 系统只需使用自带的系统 DLL。
