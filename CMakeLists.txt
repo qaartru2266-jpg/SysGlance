@@ -41,6 +41,7 @@ target_link_libraries(SysGlance PRIVATE
     comdlg32
     d2d1
     dwrite
+    dwmapi
     dxgi
     iphlpapi
     ole32

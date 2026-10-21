@@ -3,6 +3,7 @@
 
 #include <commctrl.h>
 #include <commdlg.h>
+#include <dwmapi.h>
 #include <shellapi.h>
 
 #include <cmath>
@@ -19,6 +20,7 @@ constexpr wchar_t kSurfaceClass[] = L"SysGlance.SurfaceWindow";
 constexpr wchar_t kSettingsClass[] = L"SysGlance.SettingsWindow";
 constexpr UINT kMetricsReadyMessage = WM_APP + 1;
 constexpr UINT kTrayMessage = WM_APP + 2;
+constexpr UINT_PTR kHudOrderTimer = 1;
 constexpr int kTrayId = 100;
 constexpr int kModeComboId = 200;
 constexpr int kIntervalComboId = 201;
@@ -152,6 +154,7 @@ AppUi::AppUi(HINSTANCE instance, AppConfig config, ConfigService configService,
 
 AppUi::~AppUi() {
     exiting_ = true;
+    if (mainWindow_ != nullptr) KillTimer(mainWindow_, kHudOrderTimer);
     metrics_.Stop();
     RemoveTrayIcon();
     DestroySurfaces();
@@ -221,6 +224,7 @@ bool AppUi::Initialize() {
     latest_ = metrics_.Snapshot();
     UpdateTrayTooltip();
     ApplyMode();
+    SetTimer(mainWindow_, kHudOrderTimer, 1000, nullptr);
     metrics_.SetNetworkSelection(config_.selectedNetworkLuid,
                                  config_.includeVirtualNetworkInterfaces);
     metrics_.SetGpuSelection(config_.selectedGpuLuid);
@@ -356,6 +360,7 @@ void AppUi::ApplyMode() {
     ShowWindow(hudFrameWindow_, hudVisibility);
     if (config_.displayMode == DisplayMode::Hud) {
         PositionHudSurface();
+        EnsureHudTopmost();
     }
     InvalidateRect(taskbarWindow_, nullptr, FALSE);
     InvalidateRect(hudWindow_, nullptr, FALSE);
@@ -482,6 +487,67 @@ void AppUi::PositionHudSurface() {
                  SWP_NOACTIVATE);
     UpdateHudFrameRegion(layout.frame.right - layout.frame.left, layout.frame.bottom - layout.frame.top,
                          layout.borderPixels);
+}
+
+void AppUi::EnsureHudTopmost() {
+    if (exiting_ || config_.displayMode != DisplayMode::Hud || hudDragging_ ||
+        hudWindow_ == nullptr || hudBackgroundWindow_ == nullptr || hudFrameWindow_ == nullptr) return;
+    // Keep settings, native dropdowns and our tray popup above the HUD.
+    DWORD foregroundProcess = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &foregroundProcess);
+    if (foregroundProcess == GetCurrentProcessId()) return;
+
+    RECT hudRect{};
+    if (!GetWindowRect(hudFrameWindow_, &hudRect)) return;
+    bool needsRepair = false;
+    const HWND layers[] = {hudFrameWindow_, hudWindow_, hudBackgroundWindow_};
+    for (HWND layer : layers) {
+        if (!IsWindowVisible(layer)) return; // Never reveal deliberately hidden windows.
+        if ((GetWindowLongPtrW(layer, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0) needsRepair = true;
+    }
+    // Walk once from the top to the bottom HUD layer. Visible overlapping windows
+    // between our layers also count as a broken stack. No reposition on healthy ticks.
+    int nextLayer = 0;
+    for (HWND window = GetTopWindow(nullptr); window != nullptr && nextLayer < 3;
+         window = GetWindow(window, GW_HWNDNEXT)) {
+        bool ourLayer = false;
+        for (int index = 0; index < 3; ++index) {
+            if (window == layers[index]) {
+                if (index != nextLayer) needsRepair = true;
+                ++nextLayer;
+                ourLayer = true;
+                break;
+            }
+        }
+        if (ourLayer || !IsWindowVisible(window) || IsIconic(window)) continue;
+        DWORD cloaked = 0;
+        if (SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+            cloaked != 0) continue;
+        DWORD process = 0;
+        GetWindowThreadProcessId(window, &process);
+        if (process == GetCurrentProcessId()) continue;
+        RECT rect{}, intersection{};
+        if (GetWindowRect(window, &rect) && IntersectRect(&intersection, &rect, &hudRect)) {
+            needsRepair = true;
+        }
+    }
+    if (!needsRepair) return;
+
+    const UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+    HDWP batch = BeginDeferWindowPos(3);
+    // Bottom to top; commit the complete three-layer stack together.
+    for (HWND layer : {hudBackgroundWindow_, hudWindow_, hudFrameWindow_}) {
+        if (batch == nullptr) break;
+        batch = DeferWindowPos(batch, layer, HWND_TOPMOST, 0, 0, 0, 0, flags);
+    }
+    if (batch != nullptr && EndDeferWindowPos(batch)) {
+        static ULONGLONG lastLog = 0;
+        const auto now = GetTickCount64();
+        if (lastLog == 0 || now - lastLog >= 60000) {
+            diagnostics_.Log(L"HUD Z-order restored (visible layers; no activation or geometry change)");
+            lastLog = now;
+        }
+    }
 }
 
 void AppUi::SaveHudPlacement() {
@@ -1576,6 +1642,9 @@ LRESULT CALLBACK AppUi::SettingsWindowProc(HWND hwnd, UINT message, WPARAM wPara
 
 LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+        case WM_TIMER:
+            if (wParam == kHudOrderTimer) EnsureHudTopmost();
+            return 0;
         case WM_DISPLAYCHANGE:
             metrics_.RequestRecovery();
             PositionTaskbarSurface();
@@ -1589,6 +1658,8 @@ LRESULT AppUi::HandleMainMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
         case WM_POWERBROADCAST:
             if (wParam == PBT_APMRESUMEAUTOMATIC || wParam == PBT_APMRESUMESUSPEND) {
                 metrics_.RequestRecovery();
+                PositionHudSurface();
+                EnsureHudTopmost();
             }
             return TRUE;
         case kMetricsReadyMessage:

@@ -58,6 +58,7 @@ private:
     };
     HudLayout CalculateHudLayout(const AppConfig& config, bool clampToMonitor) const;
     void PositionHudSurface();
+    void EnsureHudTopmost();
     bool CanRenderHud(const AppConfig& config) const;
     void SaveHudPlacement();
     void UpdateHudFrameRegion(int width, int height, int borderThickness);
